@@ -39,7 +39,7 @@ class Request {
     Map<String, dynamic>? headers,
   }) async {
     final requestHeaders = headers ?? {};
-    requestHeaders['User-Agent'] = globalState.ua;
+    requestHeaders['User-Agent'] ??= globalState.ua;
 
     final firstResponse = await _dio.get<Uint8List>(
       url,

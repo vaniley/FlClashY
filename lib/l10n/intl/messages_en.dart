@@ -668,11 +668,23 @@ class MessageLookup extends MessageLookupByLibrary {
       "Sent successfully",
     ),
     "settings": MessageLookupByLibrary.simpleMessage("Settings"),
+    "settingsFingerprintCustomTitle": MessageLookupByLibrary.simpleMessage(
+      "Device fingerprint (imported)",
+    ),
+    "settingsFingerprintDialogTitle": MessageLookupByLibrary.simpleMessage(
+      "Import / export fingerprint",
+    ),
+    "settingsFingerprintInvalid": MessageLookupByLibrary.simpleMessage(
+      "Paste a complete fingerprint copied from FlClash X",
+    ),
+    "settingsFingerprintTitle": MessageLookupByLibrary.simpleMessage(
+      "Device fingerprint",
+    ),
     "settingsSendDeviceDataSubtitle": MessageLookupByLibrary.simpleMessage(
-      "Send device identifier, app version and device name to proxy provider server",
+      "Send HWID, OS, OS version, device model and User-Agent to the proxy provider",
     ),
     "settingsSendDeviceDataTitle": MessageLookupByLibrary.simpleMessage(
-      "Send HWID",
+      "Send device fingerprint",
     ),
     "show": MessageLookupByLibrary.simpleMessage("Show"),
     "shrink": MessageLookupByLibrary.simpleMessage("Shrink"),

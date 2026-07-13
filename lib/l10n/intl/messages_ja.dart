@@ -495,6 +495,24 @@ class MessageLookup extends MessageLookupByLibrary {
     "selected": MessageLookupByLibrary.simpleMessage("選択済み"),
     "selectedCountTitle": m7,
     "settings": MessageLookupByLibrary.simpleMessage("設定"),
+    "settingsFingerprintCustomTitle": MessageLookupByLibrary.simpleMessage(
+      "デバイスフィンガープリント (インポート済み)",
+    ),
+    "settingsFingerprintDialogTitle": MessageLookupByLibrary.simpleMessage(
+      "フィンガープリントのインポート / エクスポート",
+    ),
+    "settingsFingerprintInvalid": MessageLookupByLibrary.simpleMessage(
+      "FlClash X からコピーした完全なフィンガープリントを貼り付けてください",
+    ),
+    "settingsFingerprintTitle": MessageLookupByLibrary.simpleMessage(
+      "デバイスフィンガープリント",
+    ),
+    "settingsSendDeviceDataSubtitle": MessageLookupByLibrary.simpleMessage(
+      "HWID、OS、OS バージョン、デバイスモデル、User-Agent をプロキシプロバイダーに送信",
+    ),
+    "settingsSendDeviceDataTitle": MessageLookupByLibrary.simpleMessage(
+      "デバイスフィンガープリントを送信",
+    ),
     "show": MessageLookupByLibrary.simpleMessage("表示"),
     "shrink": MessageLookupByLibrary.simpleMessage("縮小"),
     "silentLaunch": MessageLookupByLibrary.simpleMessage("バックグラウンド起動"),

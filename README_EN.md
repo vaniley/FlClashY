@@ -36,7 +36,7 @@ on Mobile:
 
 🇷🇺 Added Russian language to the installer and redesigned the localization in the application.
 
-✈️ Transmit HWID to the panel (Works only with <a href="https://github.com/remnawave/panel">Remnawave</a>).
+✈️ **Device fingerprint transmission:** The client sends the HWID, OS name and version, device model, and User-Agent to the panel. The complete fingerprint can be copied in Settings on a phone and pasted on a PC, or transferred in the opposite direction. It can also be reset to the current device's native values. (Works with <a href="https://github.com/remnawave/panel">Remnawave</a>.)
 
 💻 Added a new "Announcements" widget. It transmits announcements from the panel to the widget. (Works only with <a href="https://github.com/remnawave/panel">Remnawave</a>).
 
@@ -203,12 +203,32 @@ By default, the following configuration parameters received from the subscriptio
 
 ⚠️ Before use, ensure the following dependencies are installed:
 
+Arch Linux:
+
 ```bash
- sudo apt-get install libayatana-appindicator3-dev
- sudo apt-get install libkeybinder-3.0-dev
+sudo pacman -S --needed gtk3 libayatana-appindicator libkeybinder3
+```
+
+To install the build, extract the archive and run `FlClashX`. For an AppImage:
+
+```bash
+chmod +x FlClashX-linux-amd64.AppImage
+./FlClashX-linux-amd64.AppImage
+```
+
+Debian/Ubuntu:
+
+```bash
+sudo apt-get install libayatana-appindicator3-dev libkeybinder-3.0-dev
 ```
 
 ### Android
+
+Download `FlClashX-android-universal.apk`, allow installation from unknown sources for your browser or file manager, and open the APK. To install it from a PC with ADB:
+
+```bash
+adb install -r FlClashX-android-universal.apk
+```
 
 The following actions are supported:
 
@@ -223,6 +243,11 @@ The following actions are supported:
 ## Download
 
 <a href="https://github.com/pluralplay/FlClashX/releases"><img alt="Get it on GitHub" src="snapshots/get-it-on-github.svg" width="200px"/></a>
+
+## Developers
+
+- **pluralplay**
+- **Lazarrew** ([@Lazarrew](https://t.me/Lazarrew)) — device fingerprint transfer and configuration
 
 ## Star
 

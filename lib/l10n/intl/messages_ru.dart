@@ -701,11 +701,23 @@ class MessageLookup extends MessageLookupByLibrary {
       "Отправлено успешно",
     ),
     "settings": MessageLookupByLibrary.simpleMessage("Настройки"),
+    "settingsFingerprintCustomTitle": MessageLookupByLibrary.simpleMessage(
+      "Отпечаток устройства (импортирован)",
+    ),
+    "settingsFingerprintDialogTitle": MessageLookupByLibrary.simpleMessage(
+      "Импорт / экспорт отпечатка",
+    ),
+    "settingsFingerprintInvalid": MessageLookupByLibrary.simpleMessage(
+      "Вставьте полный отпечаток, скопированный из FlClash X",
+    ),
+    "settingsFingerprintTitle": MessageLookupByLibrary.simpleMessage(
+      "Отпечаток устройства",
+    ),
     "settingsSendDeviceDataSubtitle": MessageLookupByLibrary.simpleMessage(
-      "Отправлять идентификатор устройства, версию приложения и название устройства на сервер прокси-провайдера",
+      "Отправлять HWID, ОС, версию ОС, модель устройства и User-Agent прокси-провайдеру",
     ),
     "settingsSendDeviceDataTitle": MessageLookupByLibrary.simpleMessage(
-      "Отправлять HWID",
+      "Отправлять отпечаток устройства",
     ),
     "show": MessageLookupByLibrary.simpleMessage("Показать"),
     "shrink": MessageLookupByLibrary.simpleMessage("Сжать"),

@@ -433,6 +433,22 @@ class MessageLookup extends MessageLookupByLibrary {
     "selected": MessageLookupByLibrary.simpleMessage("已选择"),
     "selectedCountTitle": m7,
     "settings": MessageLookupByLibrary.simpleMessage("设置"),
+    "settingsFingerprintCustomTitle": MessageLookupByLibrary.simpleMessage(
+      "设备指纹（已导入）",
+    ),
+    "settingsFingerprintDialogTitle": MessageLookupByLibrary.simpleMessage(
+      "导入 / 导出指纹",
+    ),
+    "settingsFingerprintInvalid": MessageLookupByLibrary.simpleMessage(
+      "请粘贴从 FlClash X 复制的完整指纹",
+    ),
+    "settingsFingerprintTitle": MessageLookupByLibrary.simpleMessage("设备指纹"),
+    "settingsSendDeviceDataSubtitle": MessageLookupByLibrary.simpleMessage(
+      "向代理提供商发送 HWID、操作系统、系统版本、设备型号和 User-Agent",
+    ),
+    "settingsSendDeviceDataTitle": MessageLookupByLibrary.simpleMessage(
+      "发送设备指纹",
+    ),
     "show": MessageLookupByLibrary.simpleMessage("显示"),
     "shrink": MessageLookupByLibrary.simpleMessage("紧凑"),
     "silentLaunch": MessageLookupByLibrary.simpleMessage("静默启动"),

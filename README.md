@@ -36,7 +36,7 @@
 
 🇷🇺 Добавлен русский язык в установщик и переработана локаль в приложении
 
-✈️ Передача HWID в панель (Работает только с <a href="https://github.com/remnawave/panel">Remnawave</a>)
+✈️ **Передача отпечатка устройства:** Клиент передаёт в панель HWID, название и версию ОС, модель устройства и User-Agent. Отпечаток можно целиком скопировать в настройках на телефоне и вставить на ПК или наоборот. Поддерживается сброс к параметрам текущего устройства. (Работает с <a href="https://github.com/remnawave/panel">Remnawave</a>.)
 
 💻 Добавлен новый виджет "Анонсы". Передаёт анонсы из панели в виджет. (Работает только с <a href="https://github.com/remnawave/panel">Remnawave</a>)
 
@@ -302,12 +302,32 @@ flclashx-androidsecure: true
 
 ⚠️ Перед использованием убедитесь, что установлены следующие зависимости:
 
+Arch Linux:
+
 ```bash
- sudo apt-get install libayatana-appindicator3-dev
- sudo apt-get install libkeybinder-3.0-dev
+sudo pacman -S --needed gtk3 libayatana-appindicator libkeybinder3
+```
+
+Для установки сборки распакуйте архив, затем запустите `FlClashX`. Если скачан AppImage:
+
+```bash
+chmod +x FlClashX-linux-amd64.AppImage
+./FlClashX-linux-amd64.AppImage
+```
+
+Debian/Ubuntu:
+
+```bash
+sudo apt-get install libayatana-appindicator3-dev libkeybinder-3.0-dev
 ```
 
 ### Android
+
+Скачайте `FlClashX-android-universal.apk`, разрешите установку приложений из неизвестных источников для браузера или файлового менеджера и откройте APK. Установка с ПК через ADB:
+
+```bash
+adb install -r FlClashX-android-universal.apk
+```
 
 Поддерживаются следующие действия:
 
@@ -322,6 +342,11 @@ flclashx-androidsecure: true
 ## Скачать
 
 <a href="https://github.com/pluralplay/FlClashX/releases"><img alt="Get it on GitHub" src="snapshots/get-it-on-github.svg" width="200px"/></a>
+
+## Разработчики
+
+- **pluralplay**
+- **Lazarrew** ([@Lazarrew](https://t.me/Lazarrew)) — перенос и настройка отпечатка устройства
 
 ## Star
 

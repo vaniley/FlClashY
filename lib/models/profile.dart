@@ -178,6 +178,7 @@ extension ProfileExtension on Profile {
       if (details.os != null) headers['x-device-os'] = details.os;
       if (details.osVersion != null) headers['x-ver-os'] = details.osVersion;
       if (details.model != null) headers['x-device-model'] = details.model;
+      if (details.userAgent != null) headers['User-Agent'] = details.userAgent;
     }
 
     final response = await request.getFileResponseForUrl(

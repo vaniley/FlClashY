@@ -5,8 +5,10 @@ import 'package:flclashx/enum/enum.dart';
 import 'package:flclashx/models/models.dart';
 import 'package:flclashx/providers/providers.dart';
 import 'package:flclashx/state.dart';
+import 'package:flclashx/utils/device_info_service.dart';
 import 'package:flclashx/widgets/widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -367,6 +369,131 @@ class SendHeadersToggle extends StatefulWidget {
   State<SendHeadersToggle> createState() => _SendHeadersToggleState();
 }
 
+class DeviceFingerprintItem extends StatefulWidget {
+  const DeviceFingerprintItem({super.key});
+
+  @override
+  State<DeviceFingerprintItem> createState() => _DeviceFingerprintItemState();
+}
+
+class _DeviceFingerprintItemState extends State<DeviceFingerprintItem> {
+  final _deviceInfoService = DeviceInfoService();
+  DeviceFingerprint? _fingerprint;
+  DeviceFingerprint? _automaticFingerprint;
+  bool _isCustom = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFingerprint();
+  }
+
+  Future<void> _loadFingerprint() async {
+    final automatic = await _deviceInfoService.getAutomaticDeviceDetails();
+    final fingerprint = await _deviceInfoService.getDeviceDetails();
+    final isCustom = await _deviceInfoService.hasCustomFingerprint();
+    if (!mounted) return;
+    setState(() {
+      _fingerprint = fingerprint;
+      _automaticFingerprint = automatic;
+      _isCustom = isCustom;
+    });
+  }
+
+  Future<void> _updateFingerprint(String? value) async {
+    if (value == null) return;
+    final automatic = _automaticFingerprint?.toTransferString(pretty: false);
+    final parsed = DeviceFingerprint.tryParseTransferString(value);
+    final normalized = parsed?.toTransferString(pretty: false);
+    await _deviceInfoService.setCustomFingerprint(
+      normalized == automatic ? null : value,
+    );
+    await _loadFingerprint();
+  }
+
+  Future<void> _copyFingerprint() async {
+    final fingerprint = _fingerprint;
+    if (fingerprint == null) return;
+    await Clipboard.setData(
+      ClipboardData(text: fingerprint.toTransferString()),
+    );
+    if (mounted) context.showSnackBar(appLocalizations.copySuccess);
+  }
+
+  Future<void> _pasteFingerprint() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final value = data?.text;
+    if (value == null ||
+        DeviceFingerprint.tryParseTransferString(value.trim()) == null) {
+      if (mounted) {
+        context.showSnackBar(appLocalizations.settingsFingerprintInvalid);
+      }
+      return;
+    }
+    await _deviceInfoService.setCustomFingerprint(value);
+    await _loadFingerprint();
+    if (mounted) context.showSnackBar(appLocalizations.updated);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fingerprint = _fingerprint;
+    if (fingerprint == null) {
+      return ListItem(
+        leading: const Icon(Icons.fingerprint),
+        title: Text(appLocalizations.settingsFingerprintTitle),
+        subtitle: const LinearProgressIndicator(),
+      );
+    }
+
+    final summary = [
+      [fingerprint.os, fingerprint.osVersion]
+          .whereType<String>()
+          .join(' '),
+      fingerprint.model,
+      fingerprint.hwid,
+    ].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
+
+    return ListItem.input(
+      leading: const Icon(Icons.fingerprint),
+      title: Text(
+        _isCustom
+            ? appLocalizations.settingsFingerprintCustomTitle
+            : appLocalizations.settingsFingerprintTitle,
+      ),
+      subtitle: Text(summary, maxLines: 2, overflow: TextOverflow.ellipsis),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: appLocalizations.pasteFromClipboard,
+            onPressed: _pasteFingerprint,
+            icon: const Icon(Icons.content_paste_outlined),
+          ),
+          IconButton(
+            tooltip: appLocalizations.copy,
+            onPressed: _copyFingerprint,
+            icon: const Icon(Icons.copy_outlined),
+          ),
+        ],
+      ),
+      delegate: InputDelegate(
+        title: appLocalizations.settingsFingerprintDialogTitle,
+        value: fingerprint.toTransferString(),
+        resetValue: _automaticFingerprint?.toTransferString(),
+        validator: (value) {
+          if (value == null ||
+              DeviceFingerprint.tryParseTransferString(value.trim()) == null) {
+            return appLocalizations.settingsFingerprintInvalid;
+          }
+          return null;
+        },
+        onChanged: _updateFingerprint,
+      ),
+    );
+  }
+}
+
 class _SendHeadersToggleState extends State<SendHeadersToggle> {
   static const _preferenceKey = 'sendDeviceHeaders';
   bool _sendHeaders = true;
@@ -701,6 +828,7 @@ final generalItems = <Widget>[
   const TestUrlItem(),
   const PortItem(),
   const HostsItem(),
+  const DeviceFingerprintItem(),
   const SendHeadersToggle(),
   const Ipv6Item(),
   const AllowLanItem(),

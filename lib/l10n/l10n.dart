@@ -3519,20 +3519,60 @@ class AppLocalizations {
     );
   }
 
-  /// `Send HWID`
+  /// `Device fingerprint`
+  String get settingsFingerprintTitle {
+    return Intl.message(
+      'Device fingerprint',
+      name: 'settingsFingerprintTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Device fingerprint (imported)`
+  String get settingsFingerprintCustomTitle {
+    return Intl.message(
+      'Device fingerprint (imported)',
+      name: 'settingsFingerprintCustomTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Import / export fingerprint`
+  String get settingsFingerprintDialogTitle {
+    return Intl.message(
+      'Import / export fingerprint',
+      name: 'settingsFingerprintDialogTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Paste a complete fingerprint copied from FlClash X`
+  String get settingsFingerprintInvalid {
+    return Intl.message(
+      'Paste a complete fingerprint copied from FlClash X',
+      name: 'settingsFingerprintInvalid',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Send device fingerprint`
   String get settingsSendDeviceDataTitle {
     return Intl.message(
-      'Send HWID',
+      'Send device fingerprint',
       name: 'settingsSendDeviceDataTitle',
       desc: '',
       args: [],
     );
   }
 
-  /// `Send device identifier, app version and device name to proxy provider server`
+  /// `Send HWID, OS, OS version, device model and User-Agent to the proxy provider`
   String get settingsSendDeviceDataSubtitle {
     return Intl.message(
-      'Send device identifier, app version and device name to proxy provider server',
+      'Send HWID, OS, OS version, device model and User-Agent to the proxy provider',
       name: 'settingsSendDeviceDataSubtitle',
       desc: '',
       args: [],
