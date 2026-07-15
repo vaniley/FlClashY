@@ -1,8 +1,8 @@
-display_name: FLClashY
+display_name: FlClashY
 
-packager: pluralplay
-packagerEmail: mail@pluralplay.rw
-license: Other
+packager: vaniley
+packagerEmail: vaniley@users.noreply.github.com
+license: GPL-3.0
 
 priority: optional
 section: x11
@@ -11,11 +11,11 @@ essential: false
 icon: ./assets/images/icon.png
 
 keywords:
-  - FLClashY
+  - FlClashY
   - Clash
-    - Proxy
+  - Proxy
 
-generic_name: FLClashY
+generic_name: FlClashY
 
 group: Applications/Internet
 

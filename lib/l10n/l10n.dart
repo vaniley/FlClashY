@@ -1714,6 +1714,16 @@ class AppLocalizations {
     );
   }
 
+  /// `Main developer`
+  String get mainDeveloper {
+    return Intl.message(
+      'Main developer',
+      name: 'mainDeveloper',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Auto close connections`
   String get autoCloseConnections {
     return Intl.message(

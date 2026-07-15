@@ -24,7 +24,7 @@ body:
   - type: textarea
     attributes:
       label: Версия / Version
-      description: Пожалуйста, укажите конкретную версию FLClashY / Please provide the specific version of FLClashY.
+      description: Пожалуйста, укажите конкретную версию FlClashY / Please provide the specific version of FlClashY.
     validations:
       required: true
   - type: textarea

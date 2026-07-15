@@ -8,13 +8,13 @@ import 'package:flclashx/enum/enum.dart';
 import 'package:flclashx/models/models.dart';
 import 'package:flutter/material.dart';
 
-const appName = "FLClashY";
+const appName = "FlClashY";
 const appHelperService = "FlClashHelperService";
 const coreName = "clashx.meta";
 const browserUa =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 const packageName = "com.follow.flclashy";
-final unixSocketPath = "/tmp/FLClashYSocket_${Random().nextInt(10000)}.sock";
+final unixSocketPath = "/tmp/FlClashYSocket_${Random().nextInt(10000)}.sock";
 const helperPort = 47890;
 const maxTextScale = 1.4;
 const minTextScale = 0.8;
@@ -88,9 +88,9 @@ double getWidgetHeight(num lines) => max(lines * 84 + (lines - 1) * 16, 0).ap;
 
 const maxLength = 150;
 
-const mainIsolate = "FLClashYMainIsolate";
+const mainIsolate = "FlClashYMainIsolate";
 
-const serviceIsolate = "FLClashYServiceIsolate";
+const serviceIsolate = "FlClashYServiceIsolate";
 
 const defaultPrimaryColors = [
   0xFF795548,

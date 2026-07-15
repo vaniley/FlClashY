@@ -3,4 +3,4 @@ app_dir="$HOME/.local/lib/flclashy"
 export PATH="$app_dir:$PATH"
 export LD_LIBRARY_PATH="$app_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 cd "$app_dir" || exit 1
-exec "$app_dir/FLClashY" "$@"
+exec "$app_dir/FlClashY" "$@"

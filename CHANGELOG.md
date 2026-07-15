@@ -1,3 +1,10 @@
+## v0.4.0
+
+- Rename the application consistently to FlClashY and refresh platform icons.
+- Remove the unintended pre-release badge from normal builds.
+- Fix Linux TUN startup ordering and desktop packaging metadata.
+- Keep Android subscription, dashboard, widget, and device fingerprint extensions.
+
 ## v0.8.86
 
 - Fix windows tun issues

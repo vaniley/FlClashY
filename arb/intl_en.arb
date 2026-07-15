@@ -223,6 +223,7 @@
   "go": "Go",
   "externalLink": "External link",
   "otherContributors": "Contributors",
+  "mainDeveloper": "Main developer",
   "autoCloseConnections": "Auto close connections",
   "autoCloseConnectionsDesc": "Auto close connections after change node",
   "onlyStatisticsProxy": "Count only proxy traffic",

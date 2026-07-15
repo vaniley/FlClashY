@@ -54,7 +54,7 @@ fun Service.createFlClashXNotificationBuilder(): Deferred<NotificationCompat.Bui
             )
         ) {
             setSmallIcon(R.drawable.ic)
-            setContentTitle("FLClashY")
+            setContentTitle("FlClashY")
             setContentIntent(pendingIntent)
             setCategory(NotificationCompat.CATEGORY_SERVICE)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

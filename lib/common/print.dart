@@ -14,7 +14,7 @@ class CommonPrint {
   static CommonPrint? _instance;
 
   void log(String? text) {
-    final payload = "[FLClashY] $text";
+    final payload = "[FlClashY] $text";
     debugPrint(payload);
     
     // Write to file log

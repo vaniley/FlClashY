@@ -89,6 +89,8 @@ class BuildItem {
 }
 
 class Build {
+  static bool _distributorReady = false;
+
   static List<BuildItem> get buildItems => [
         BuildItem(
           target: Target.macos,
@@ -131,7 +133,7 @@ class Build {
         ),
       ];
 
-  static String get appName => "FLClashY";
+  static String get appName => "FlClashY";
 
   static String get coreName => "FlClashCore";
 
@@ -175,15 +177,18 @@ class Build {
     String? name,
     Map<String, String>? environment,
     String? workingDirectory,
-    bool runInShell = true,
+    bool? runInShell,
   }) async {
     if (name != null) print("run $name");
+    final command = Platform.isWindows
+        ? executable
+        : <String>["/usr/bin/env", ...executable];
     final process = await Process.start(
-      executable[0],
-      executable.sublist(1),
+      command[0],
+      command.sublist(1),
       environment: environment,
       workingDirectory: workingDirectory,
-      runInShell: runInShell,
+      runInShell: runInShell ?? Platform.isWindows,
     );
     process.stdout.listen((data) {
       print(utf8.decode(data));
@@ -239,11 +244,13 @@ class Build {
   }) async {
     final isLib = mode == Mode.lib;
 
-    final items = buildItems.where(
-      (element) =>
-          element.target == target &&
-          (arch == null ? true : element.arch == arch),
-    ).toList();
+    final items = buildItems
+        .where(
+          (element) =>
+              element.target == target &&
+              (arch == null ? true : element.arch == arch),
+        )
+        .toList();
 
     final List<String> corePaths = [];
 
@@ -339,12 +346,12 @@ class Build {
       "--features",
       "windows-service",
     ];
-    
+
     // Add target for cross-compilation
     if (arch == Arch.arm64 && target == Target.windows) {
       buildArgs.addAll(["--target", "aarch64-pc-windows-msvc"]);
     }
-    
+
     await exec(
       buildArgs,
       environment: {
@@ -353,15 +360,16 @@ class Build {
       name: "build helper",
       workingDirectory: _servicesDir,
     );
-    
+
     // Determine output path based on architecture
     final String releasePath;
     if (arch == Arch.arm64 && target == Target.windows) {
-      releasePath = join(_servicesDir, "target", "aarch64-pc-windows-msvc", "release");
+      releasePath =
+          join(_servicesDir, "target", "aarch64-pc-windows-msvc", "release");
     } else {
       releasePath = join(_servicesDir, "target", "release");
     }
-    
+
     final outPath = join(
       releasePath,
       "helper${target.executableExtensionName}",
@@ -377,6 +385,8 @@ class Build {
   static List<String> getExecutable(String command) => command.split(" ");
 
   static getDistributor() async {
+    if (_distributorReady) return;
+
     final distributorDir = join(
       current,
       "plugins",
@@ -386,19 +396,23 @@ class Build {
     );
 
     await exec(
-      name: "clean distributor",
-      Build.getExecutable("flutter clean"),
-      workingDirectory: distributorDir,
-    );
-    await exec(
-      name: "upgrade distributor",
-      Build.getExecutable("flutter pub upgrade"),
+      name: "get distributor dependencies",
+      Build.getExecutable("flutter pub get"),
       workingDirectory: distributorDir,
     );
     await exec(
       name: "get distributor",
-      Build.getExecutable("dart pub global activate -s path $distributorDir"),
+      [
+        "dart",
+        "pub",
+        "global",
+        "activate",
+        "-s",
+        "path",
+        distributorDir,
+      ],
     );
+    _distributorReady = true;
   }
 
   static copyFile(String sourceFilePath, String destinationFilePath) {
@@ -592,7 +606,7 @@ class BuildCommand extends Command {
     await Build.exec(
       name: name,
       Build.getExecutable(
-        "flutter_distributor package --skip-clean --platform ${target.name} --targets $targets --flutter-build-args=verbose$args --build-dart-define=APP_ENV=$env",
+        "dart pub global run flutter_distributor:main package --skip-clean --platform ${target.name} --targets $targets --flutter-build-args=verbose$args --build-dart-define=APP_ENV=$env",
       ),
     );
   }
@@ -612,7 +626,7 @@ class BuildCommand extends Command {
     final mode = target == Target.android ? Mode.lib : Mode.core;
     final String out = argResults?["out"] ?? (target.same ? "app" : "core");
     final archName = argResults?["arch"];
-    final env = argResults?["env"] ?? "pre";
+    final env = argResults?["env"] ?? "stable";
     final currentArches =
         arches.where((element) => element.name == archName).toList();
     final arch = currentArches.isEmpty ? null : currentArches.first;

@@ -1,6 +1,8 @@
-# FLClashY
+# FlClashY
 
-FLClashY — форк [FlClash](https://github.com/chen08209/FlClash) и [FlClashX](https://github.com/pluralplay/FlClashX) на Flutter и Mihomo. Мы сохраняем совместимость с форматами и заголовками FlClashX, но приложение имеет своё имя, иконку и Android package ID `com.follow.flclashy`, поэтому может быть установлено рядом с другими форками.
+FlClashY — форк [FlClash](https://github.com/chen08209/FlClash) и [FlClashX](https://github.com/pluralplay/FlClashX) на Flutter и Mihomo. Мы сохраняем совместимость с форматами и заголовками FlClashX, но приложение имеет своё имя, иконку и Android package ID `com.follow.flclashy`, поэтому может быть установлено рядом с другими форками.
+
+Основной разработчик — [lazarrew](https://github.com/vaniley). Актуальный репозиторий проекта: [vaniley/FlClashY](https://github.com/vaniley/FlClashY).
 
 ## Что добавлено в этом форке
 
@@ -52,4 +54,4 @@ dart setup.dart linux --arch amd64 --out core
 flutter build linux --release
 ```
 
-Проект распространяется под лицензией GPL-3.0. Исходные проекты и их авторы указаны выше; изменения FLClashY ведутся в этом репозитории.
+Проект распространяется под лицензией GPL-3.0. Исходные проекты и их авторы указаны выше; изменения FlClashY ведутся в этом репозитории.

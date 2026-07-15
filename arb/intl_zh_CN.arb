@@ -218,6 +218,7 @@
   "go": "前往",
   "externalLink": "外部链接",
   "otherContributors": "贡献者",
+  "mainDeveloper": "主要开发者",
   "autoCloseConnections": "自动关闭连接",
   "autoCloseConnectionsDesc": "切换节点后自动关闭连接",
   "onlyStatisticsProxy": "仅统计代理",

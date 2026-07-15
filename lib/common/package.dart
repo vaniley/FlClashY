@@ -4,7 +4,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 extension PackageInfoExtension on PackageInfo {
   String get ua => [
-        "FLClashY/v$version",
+        "FlClashY/v$version",
         "Platform/${Platform.operatingSystem}",
       ].join(" ");
 }

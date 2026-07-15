@@ -1,8 +1,8 @@
-display_name: FLClashY
-package_name: FLClashY
+display_name: FlClashY
+package_name: FlClashY
 maintainer:
-  name: pluralplay
-  email: mail@pluralplay.rw
+  name: vaniley
+  email: vaniley@users.noreply.github.com
 
 priority: optional
 section: x11
@@ -11,16 +11,16 @@ essential: false
 icon: ./assets/images/icon.png
 
 dependencies:
-  - libayatana-appindicator3-dev
-  - libkeybinder-3.0-dev
+  - libayatana-appindicator3-1
+  - libkeybinder-3.0-0
 
 keywords:
-  - FLClashY
+  - FlClashY
   - Clash
   - ClashMeta
   - Proxy
 
-generic_name: FLClashY
+generic_name: FlClashY
 
 categories:
   - Network

@@ -223,6 +223,7 @@
   "go": "Перейти",
   "externalLink": "Внешняя ссылка",
   "otherContributors": "Контрибьюторы",
+  "mainDeveloper": "Основной разработчик",
   "autoCloseConnections": "Автозакрытие соединений",
   "autoCloseConnectionsDesc": "Автоматически закрывать соединения при смене сервера",
   "onlyStatisticsProxy": "Учитывать только прокси-трафик",

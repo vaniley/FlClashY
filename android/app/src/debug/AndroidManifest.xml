@@ -6,11 +6,11 @@
     -->
     <application
         android:icon="@mipmap/ic_launcher"
-        android:label="FLClashY Debug"
+        android:label="FlClashY Debug"
         tools:replace="android:label">
         <service
             android:name=".services.FlClashXTileService"
-            android:label="FLClashY Debug"
+            android:label="FlClashY Debug"
             tools:replace="android:label"
             tools:targetApi="24" />
     </application>

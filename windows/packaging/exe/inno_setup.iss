@@ -41,7 +41,7 @@ var
   i: Integer;
   ResultCode: Integer;
 begin
-  Processes := ['FLClashY.exe', 'FlClashCore.exe', 'FlClashHelperService.exe'];
+  Processes := ['FlClashY.exe', 'FlClashCore.exe', 'FlClashHelperService.exe'];
 
   // First try graceful shutdown
   for i := 0 to GetArrayLength(Processes)-1 do
