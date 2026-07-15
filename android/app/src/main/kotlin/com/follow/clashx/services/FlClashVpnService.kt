@@ -141,7 +141,7 @@ class FlClashXVpnService : VpnService(), BaseServiceInterface {
                     }
                 }
             }
-            setSession("FlClashX")
+            setSession("FLClashY")
             setBlocking(false)
             if (Build.VERSION.SDK_INT >= 29) {
                 setMetered(false)

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=FLClashY
+GenericName=FLClashY
+Comment=Customizable FlClash fork based on Mihomo
+Exec=flclashy %U
+Icon=flclashy
+Terminal=false
+Categories=Network;
+Keywords=FLClashY;FlClash;Clash;Mihomo;Proxy;VPN;
+StartupNotify=true

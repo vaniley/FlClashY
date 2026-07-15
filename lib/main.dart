@@ -252,7 +252,7 @@ Future<void> _service(List<String> flags) async {
     try {
       final traffic = clashLibHandler.getTraffic();
       final profile = globalState.config.currentProfile;
-      final profileName = profile?.label ?? profile?.id ?? "FlClashX";
+      final profileName = profile?.label ?? profile?.id ?? "FLClashY";
 
       // Get server group name from header (may be base64-encoded)
       String? groupName = profile?.providerHeaders['flclashx-serverinfo'];
@@ -298,7 +298,7 @@ Future<void> _service(List<String> flags) async {
     } catch (_) {
       // Fallback minimal
       return json.encode({
-        "title": "FlClashX",
+        "title": "FLClashY",
         "server": "",
         "content": ""
       });

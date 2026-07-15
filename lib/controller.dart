@@ -1074,7 +1074,7 @@ class AppController {
       final filesToDelete = [
         'cache.db',
         'libCachedImageData.json',
-        'FlClashX.lock',
+        'FLClashY.lock',
       ];
 
       for (final fileName in filesToDelete) {

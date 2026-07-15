@@ -39,10 +39,10 @@ class AppPath {
 
   String get corePath {
     if (Platform.isMacOS) {
-      // Core is stored in Application Support/com.follow.clash/cores/ (copied by Swift code on launch)
+      // Core is stored in Application Support/com.follow.flclashy/cores/ (copied by Swift code on launch)
       // Permissions are set automatically in Swift
       final home = Platform.environment['HOME'] ?? '';
-      return '$home/Library/Application Support/com.follow.clash/cores/FlClashCore';
+      return '$home/Library/Application Support/com.follow.flclashy/cores/FlClashCore';
     }
     return join(executableDirPath, "FlClashCore$executableExtension");
   }
@@ -61,7 +61,7 @@ class AppPath {
 
   Future<String> get lockFilePath async {
     final directory = await dataDir.future;
-    return join(directory.path, "FlClashX.lock");
+    return join(directory.path, "FLClashY.lock");
   }
 
   Future<String> get sharedPreferencesPath async {

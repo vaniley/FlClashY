@@ -1,11 +1,11 @@
 script_template: inno_setup.iss
-app_id: 728B3532-C74B-4870-9068-BE70FE12A3E6
-app_name: FlClashX
-publisher: pluralplay
-publisher_url: https://github.com/pluralplay/FlClashX
-display_name: FlClashX
-executable_name: FlClashX.exe
-output_base_file_name: FlClashX.exe
+app_id: 9023088E-DCCC-4BF1-81A4-EDC21B84FB82
+app_name: FLClashY
+publisher: vaniley
+publisher_url: https://github.com/vaniley/FlClashY
+display_name: FLClashY
+executable_name: FLClashY.exe
+output_base_file_name: FLClashY.exe
 setup_icon_file: ..\windows\runner\resources\app_icon.ico
 locales:
   - lang: ru

@@ -1,4 +1,4 @@
-display_name: FlClashX
+display_name: FLClashY
 
 packager: pluralplay
 packagerEmail: mail@pluralplay.rw
@@ -11,11 +11,11 @@ essential: false
 icon: ./assets/images/icon.png
 
 keywords:
-  - FlClashX
+  - FLClashY
   - Clash
     - Proxy
 
-generic_name: FlClashX
+generic_name: FLClashY
 
 group: Applications/Internet
 

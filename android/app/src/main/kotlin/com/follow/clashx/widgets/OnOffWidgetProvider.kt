@@ -24,7 +24,7 @@ class OnOffWidgetProvider : AppWidgetProvider() {
     companion object {
         private const val TAG = "OnOffWidgetProvider"
 
-        const val ACTION_TOGGLE = "com.follow.clashx.widget.ACTION_ONOFF_TOGGLE"
+        const val ACTION_TOGGLE = "com.follow.flclashy.widget.ACTION_ONOFF_TOGGLE"
 
         @Volatile
         private var observersAttached = false
