@@ -71,17 +71,15 @@ func handleStartListener() bool {
 	}
 	runLock.Unlock()
 
-	// setupConfig already ran executor.ApplyConfig when the profile was loaded,
-	// so proxies/rules/DNS/providers are live. Starting only needs to (re)bind
-	// listeners and (re)create the TUN device — calling ApplyConfig again would
-	// re-run updateProxies, loadProvider(wg.Wait()), updateDNS and runtime.GC()
-	// for no reason and was the main source of the long "start" delay.
-	go func() {
-		updateListeners()
-		resolver.ResetConnection()
-		startHealthCheckForwarder()
-		startRequestForwarder()
-	}()
+	// setupConfig already applied proxies, rules, DNS and providers. Listener
+	// creation must still complete before startListener reports success: Flutter
+	// treats that response as the point at which traffic may use the TUN.
+	// Running this in a goroutine created a window where the app reported an
+	// active VPN while the interface and its routes did not exist yet.
+	updateListeners()
+	resolver.ResetConnection()
+	startHealthCheckForwarder()
+	startRequestForwarder()
 	return true
 }
 

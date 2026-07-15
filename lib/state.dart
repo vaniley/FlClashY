@@ -148,9 +148,9 @@ class GlobalState {
   }
 
   Future<void> handleStart([UpdateTasks? tasks]) async {
-    startTime ??= DateTime.now();
     await clashCore.startListener();
     await service?.startVpn();
+    startTime ??= DateTime.now();
     startUpdateTasks(tasks);
   }
 
