@@ -24,6 +24,8 @@ mixin ClashInterface {
 
   Future<String> asyncTestDelay(String url, String proxyName);
 
+  Future<void> healthCheck([String groupName = '']);
+
   FutureOr<String> updateConfig(UpdateParams updateParams);
 
   FutureOr<String> setupConfig(SetupParams setupParams);
@@ -57,6 +59,8 @@ mixin ClashInterface {
 
   FutureOr<String> getMemory();
 
+  FutureOr<String> getCoreVersion();
+
   resetTraffic();
 
   startLog();
@@ -74,6 +78,8 @@ mixin ClashInterface {
   FutureOr<bool> resetConnections();
 
   Future<bool> setState(CoreState state);
+
+  Future<bool> setUiActive(bool active);
 }
 
 mixin AndroidClashInterface {
@@ -88,6 +94,11 @@ mixin AndroidClashInterface {
 
 abstract class ClashHandlerInterface with ClashInterface {
   Map<String, Completer> callbackCompleterMap = {};
+
+  /// Per-call type-appropriate default value, so a failed call can complete the
+  /// typed completer with the right default instead of `null` (which throws a
+  /// TypeError on a non-nullable type and strands the caller until timeout).
+  Map<String, dynamic> callbackDefaultMap = {};
 
   Future<void> handleResult(ActionResult result) async {
     final completer = callbackCompleterMap[result.id];
@@ -106,6 +117,13 @@ abstract class ClashHandlerInterface with ClashInterface {
       }
     } catch (e) {
       commonPrint.log("${result.id} error $e");
+      // Type mismatch (e.g. the remote sent a bool for a Completer<String>):
+      // completing with the wrong type threw above and left the completer
+      // pending until the 30s safeFuture timeout — a "random" 30s freeze of
+      // whatever call this was. Complete with the typed default now.
+      if (completer != null && !completer.isCompleted) {
+        completer.complete(callbackDefaultMap[result.id]);
+      }
     }
   }
 
@@ -136,6 +154,7 @@ abstract class ClashHandlerInterface with ClashInterface {
         mDefaultValue = {};
       }
     }
+    callbackDefaultMap[id] = mDefaultValue;
 
     sendMessage(
       json.encode(
@@ -151,6 +170,7 @@ abstract class ClashHandlerInterface with ClashInterface {
       timeout: timeout,
       onLast: () {
         callbackCompleterMap.remove(id);
+        callbackDefaultMap.remove(id);
       },
       onTimeout: onTimeout ??
           () => mDefaultValue as T,
@@ -171,6 +191,14 @@ abstract class ClashHandlerInterface with ClashInterface {
     );
 
   @override
+  Future<bool> setUiActive(bool active) => invoke<bool>(
+      method: ActionMethod.setUiActive,
+      data: active,
+      // Short timeout so an older core without this handler degrades silently
+      // instead of leaving a pending completer.
+      timeout: const Duration(seconds: 2),
+    );
+
   @override
   Future<bool> shutdown() => invoke<bool>(
       method: ActionMethod.shutdown,
@@ -198,6 +226,10 @@ abstract class ClashHandlerInterface with ClashInterface {
         method: ActionMethod.updateConfig,
         data: json.encode(updateParams),
         timeout: const Duration(minutes: 2),
+        // Empty string means success to callers; the default-on-timeout is "",
+        // which would mask a 2-minute hang as a successful apply. Return a
+        // non-empty error string so the caller actually treats it as failed.
+        onTimeout: () => 'updateConfig timed out',
       );
 
   @override
@@ -205,7 +237,10 @@ abstract class ClashHandlerInterface with ClashInterface {
         method: ActionMethod.getConfig,
         data: path,
         timeout: const Duration(minutes: 2),
-        defaultValue: Result.success({}),
+        // A timed-out/failed read used to default to Result.success({}), making
+        // the caller treat an empty config as a successful load. Yield an error
+        // Result so getConfig()'s error path fires instead.
+        defaultValue: Result.error('getConfig timed out'),
       );
 
   @override
@@ -215,6 +250,10 @@ abstract class ClashHandlerInterface with ClashInterface {
       method: ActionMethod.setupConfig,
       data: data,
       timeout: const Duration(minutes: 2),
+      // Non-empty = error to callers; the default "" would mask a 2-minute hang
+      // as a successful setup (and falsely advance lastProfileModified), so the
+      // recovery re-apply would silently no-op against a still-broken executor.
+      onTimeout: () => 'setupConfig timed out',
     );
   }
 
@@ -250,7 +289,7 @@ abstract class ClashHandlerInterface with ClashInterface {
   Future<String> updateGeoData(UpdateGeoDataParams params) => invoke<String>(
         method: ActionMethod.updateGeoData,
         data: json.encode(params),
-        timeout: const Duration(minutes: 1));
+        timeout: const Duration(seconds: 100));
 
   @override
   Future<String> sideLoadExternalProvider({
@@ -353,6 +392,13 @@ abstract class ClashHandlerInterface with ClashInterface {
   }
 
   @override
+  Future<void> healthCheck([String groupName = '']) => invoke<String>(
+      method: ActionMethod.healthCheck,
+      data: groupName,
+      timeout: const Duration(seconds: 30),
+    );
+
+  @override
   FutureOr<String> getCountryCode(String ip) => invoke<String>(
       method: ActionMethod.getCountryCode,
       data: ip,
@@ -361,5 +407,10 @@ abstract class ClashHandlerInterface with ClashInterface {
   @override
   FutureOr<String> getMemory() => invoke<String>(
       method: ActionMethod.getMemory,
+    );
+
+  @override
+  FutureOr<String> getCoreVersion() => invoke<String>(
+      method: ActionMethod.getCoreVersion,
     );
 }

@@ -7,6 +7,7 @@ import 'package:flclashx/plugins/app.dart';
 import 'package:flclashx/state.dart';
 import 'package:flclashx/widgets/input.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class System {
 
@@ -21,6 +22,23 @@ class System {
 
   bool get isDesktop =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
+  bool? get isWindowsSystemDark {
+    if (!Platform.isWindows) return null;
+    try {
+      final result = Process.runSync('reg', [
+        'query',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize',
+        '/v', 'SystemUsesLightTheme',
+      ]);
+      if (result.exitCode != 0) return null;
+      final match = RegExp(r'0x(\d+)').firstMatch(result.stdout.toString());
+      if (match == null) return null;
+      return int.tryParse(match.group(1)!) == 0;
+    } catch (_) {
+      return null;
+    }
+  }
 
   bool get isMobile => Platform.isAndroid || Platform.isIOS;
 
@@ -92,19 +110,22 @@ class System {
       }
       return AuthorizeCode.error;
     } else if (Platform.isLinux) {
-      final shell = Platform.environment['SHELL'] ?? 'bash';
       final password = await globalState.showCommonDialog<String>(
         child: InputDialog(
           title: appLocalizations.pleaseInputAdminPassword,
           value: '',
         ),
       );
-      final arguments = [
-        "-c",
-        'echo "$password" | sudo -S chown root:root "$corePath" && echo "$password" | sudo -S chmod +sx "$corePath"'
-      ];
-      final result = await Process.run(shell, arguments);
-      if (result.exitCode != 0) {
+      if (password == null) return AuthorizeCode.error;
+      final proc = await Process.start('sudo', [
+        '-S', 'sh', '-c',
+        'chown root:root "\$1" && chmod +sx "\$1"',
+        'sh', corePath,
+      ]);
+      proc.stdin.writeln(password);
+      await proc.stdin.close();
+      final exitCode = await proc.exitCode;
+      if (exitCode != 0) {
         return AuthorizeCode.error;
       }
       return AuthorizeCode.success;
@@ -141,12 +162,13 @@ class System {
     final currentServiceNameLine = currentService.split("\n").firstWhere(
         (line) => RegExp(r'^\(\d+\).*').hasMatch(line),
         orElse: () => "");
-    final currentServiceNameLineSplits =
-        currentServiceNameLine.trim().split(' ');
-    if (currentServiceNameLineSplits.length < 2) {
-      return null;
-    }
-    return currentServiceNameLineSplits[1];
+    // Strip the leading "(N) " index; the rest is the full service name, which can
+    // contain spaces ("Thunderbolt Ethernet", "USB 10/100/1000 LAN"). The old
+    // split(' ')[1] truncated multi-word names, silently breaking auto system-DNS
+    // (and poisoning originDns with networksetup's error text) on wired/USB adapters.
+    final name =
+        currentServiceNameLine.trim().replaceFirst(RegExp(r'^\(\d+\)\s*'), '');
+    return name.isEmpty ? null : name;
   }
 
   Future<List<String>?> getMacOSOriginDns() async {
@@ -178,19 +200,32 @@ class System {
     if (serviceName == null) {
       return;
     }
+    final prefs = await SharedPreferences.getInstance();
+    const originKey = "macos_origin_dns";
+    const needAddDns = "1.1.1.1"; // Cloudflare DNS
     List<String>? nextDns;
     if (restore) {
-      nextDns = originDns;
+      // Prefer the persisted true origin over the in-memory snapshot, then clear
+      // it so the next session starts clean.
+      nextDns = prefs.getStringList(originKey) ?? originDns;
+      await prefs.remove(originKey);
     } else {
-      final originDns = await system.getMacOSOriginDns();
-      if (originDns == null) {
+      final saved = prefs.getStringList(originKey);
+      final origin = saved ?? await system.getMacOSOriginDns();
+      if (origin == null) {
         return;
       }
-      const needAddDns = "1.1.1.1"; // Cloudflare DNS
-      if (originDns.contains(needAddDns)) {
-        return;
+      // Persist the TRUE pre-injection DNS exactly once. Preferring a persisted
+      // snapshot over the live read means a crash-polluted live value (already
+      // carrying 1.1.1.1 from a prior unclean exit) can never become the "origin"
+      // and get baked in permanently. A genuine 1.1.1.1 user keeps their value
+      // because we never strip it from the saved snapshot.
+      if (saved == null) {
+        await prefs.setStringList(originKey, origin);
       }
-      nextDns = List.from(originDns)..add(needAddDns);
+      nextDns = origin.contains(needAddDns)
+          ? List<String>.from(origin)
+          : (List<String>.from(origin)..add(needAddDns));
     }
     if (nextDns == null) {
       return;

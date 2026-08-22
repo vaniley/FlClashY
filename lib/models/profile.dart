@@ -34,6 +34,7 @@ class SubscriptionInfo with _$SubscriptionInfo {
     final map = <String, int?>{};
     for (final i in list) {
       final keyValue = i.trim().split("=");
+      if (keyValue.length < 2) continue;
       map[keyValue[0]] = int.tryParse(keyValue[1]);
     }
     return SubscriptionInfo(
@@ -200,7 +201,8 @@ extension ProfileExtension on Profile {
       'announce',
       'support-url', 
       'profile-update-interval',
-      'x-hwid-limit',
+      'x-hwid-max-devices-reached',
+      'x-hwid-not-supported',
     ];
     
     for (final headerName in headersToCollect) {
@@ -224,8 +226,18 @@ extension ProfileExtension on Profile {
         durationFromHeader = Duration(hours: hours);
       }
     }
-    
+
+    String updatedUrl = url;
+    final newDomain = providerHeaders['flclashx-newdomain'];
+    if (newDomain != null && newDomain.isNotEmpty) {
+      final currentUri = Uri.tryParse(url);
+      if (currentUri != null && currentUri.host != newDomain) {
+        updatedUrl = currentUri.replace(host: newDomain).toString();
+      }
+    }
+
     return copyWith(
+      url: updatedUrl,
       label: label ?? utils.getFileNameForDisposition(disposition) ?? id,
       subscriptionInfo: SubscriptionInfo.formHString(userinfo),
       autoUpdateDuration: durationFromHeader ?? autoUpdateDuration,

@@ -10,13 +10,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:re_highlight/languages/javascript.dart';
 import 'package:re_highlight/languages/yaml.dart';
+import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:re_highlight/styles/atom-one-light.dart';
 
 typedef EditingValueChangeBuilder = Widget Function(CodeLineEditingValue value);
 typedef TextEditingValueChangeBuilder = Widget Function(TextEditingValue value);
 
 class EditorPage extends ConsumerStatefulWidget {
-
   const EditorPage({
     super.key,
     required this.title,
@@ -25,10 +25,9 @@ class EditorPage extends ConsumerStatefulWidget {
     this.onSave,
     this.onPop,
     this.supportRemoteDownload = false,
-    this.languages = const [
-      Language.yaml,
-    ],
+    this.languages = const [Language.yaml],
   });
+
   final String title;
   final String content;
   final List<Language> languages;
@@ -46,12 +45,14 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   late CodeLineEditingController _controller;
   late CodeFindController _findController;
   late TextEditingController _titleController;
+  late String _initialText;
   final _focusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
     _controller = CodeLineEditingController.fromText(widget.content);
+    _initialText = _controller.text;
     _findController = CodeFindController(_controller);
     _titleController = TextEditingController(text: widget.title);
     if (system.isDesktop) {
@@ -70,7 +71,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         _controller.moveCursor(AxisDirection.down);
         return KeyEventResult.handled;
       } else if (key == LogicalKeyboardKey.arrowLeft) {
-        _controller.selection.endIndex;
         _controller.moveCursor(AxisDirection.left);
         return KeyEventResult.handled;
       } else if (key == LogicalKeyboardKey.arrowRight) {
@@ -85,38 +85,32 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   void dispose() {
     _findController.dispose();
     _controller.dispose();
+    _titleController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
-  Widget _wrapController(EditingValueChangeBuilder builder) => ValueListenableBuilder(
-      valueListenable: _controller,
-      builder: (_, value, ___) => builder(value),
-    );
+  Widget _wrapController(EditingValueChangeBuilder builder) =>
+      ValueListenableBuilder(
+        valueListenable: _controller,
+        builder: (_, value, ___) => builder(value),
+      );
 
-  Widget _wrapTitleController(TextEditingValueChangeBuilder builder) => ValueListenableBuilder(
-      valueListenable: _titleController,
-      builder: (_, value, ___) => builder(value),
-    );
-
-  void _handleSearch() {
-    _findController.findMode();
-  }
+  Widget _wrapTitleController(TextEditingValueChangeBuilder builder) =>
+      ValueListenableBuilder(
+        valueListenable: _titleController,
+        builder: (_, value, ___) => builder(value),
+      );
 
   Future<void> _handleImport() async {
     final option = await globalState.showCommonDialog<ImportOption>(
       child: const _ImportOptionsDialog(),
     );
-    if (option == null) {
-      return;
-    }
+    if (option == null) return;
     if (option == ImportOption.file) {
       final file = await picker.pickerFile();
-      if (file == null) {
-        return;
-      }
-      final res = String.fromCharCodes(file.bytes?.toList() ?? []);
-      _controller.text = res;
+      if (file == null) return;
+      _controller.text = String.fromCharCodes(file.bytes?.toList() ?? []);
       return;
     }
     final url = await globalState.showCommonDialog(
@@ -135,9 +129,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         },
       ),
     );
-    if (url == null) {
-      return;
-    }
+    if (url == null) return;
     final res = await request.getTextResponseForUrl(url);
     _controller.text = res.data;
   }
@@ -145,19 +137,13 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   @override
   Widget build(BuildContext context) {
     final isMobileView = ref.watch(isMobileViewProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return CommonPopScope(
       onPop: () async {
-        if (widget.onPop == null) {
-          return true;
-        }
+        if (widget.onPop == null) return true;
         final res = await widget.onPop!(
-          context,
-          _titleController.text,
-          _controller.text,
-        );
-        if (res && context.mounted) {
-          return true;
-        }
+            context, _titleController.text, _controller.text);
+        if (res && context.mounted) return true;
         return false;
       },
       child: CommonScaffold(
@@ -176,17 +162,12 @@ class _EditorPageState extends ConsumerState<EditorPage> {
           actions: genActions([
             if (widget.onSave != null)
               _wrapController(
-                (value) => _wrapTitleController(
-                  (value) => IconButton(
-                    onPressed: _controller.text != widget.content ||
+                (_) => _wrapTitleController(
+                  (_) => IconButton(
+                    onPressed: _controller.text != _initialText ||
                             _titleController.text != widget.title
-                        ? () {
-                            widget.onSave!(
-                              context,
-                              _titleController.text,
-                              _controller.text,
-                            );
-                          }
+                        ? () => widget.onSave!(
+                            context, _titleController.text, _controller.text)
                         : null,
                     icon: const Icon(Icons.save_sharp),
                   ),
@@ -195,27 +176,22 @@ class _EditorPageState extends ConsumerState<EditorPage> {
             if (widget.supportRemoteDownload)
               IconButton(
                 onPressed: _handleImport,
-                icon: const Icon(
-                  Icons.arrow_downward,
-                ),
+                icon: const Icon(Icons.arrow_downward),
               ),
+            IconButton(
+              onPressed: _findController.findMode,
+              icon: const Icon(Icons.search),
+            ),
             _wrapController(
-              (value) => CommonPopupBox(
+              (_) => CommonPopupBox(
                 targetBuilder: (open) => IconButton(
-                    onPressed: () {
-                      open(
-                        offset: const Offset(-20, 20),
-                      );
-                    },
-                    icon: const Icon(Icons.more_vert),
-                  ),
+                  onPressed: () {
+                    open(offset: const Offset(-20, 20));
+                  },
+                  icon: const Icon(Icons.more_vert),
+                ),
                 popup: CommonPopupMenu(
                   items: [
-                    PopupMenuItemData(
-                      icon: Icons.search,
-                      label: appLocalizations.search,
-                      onPressed: _handleSearch,
-                    ),
                     PopupMenuItemData(
                       icon: Icons.undo,
                       label: appLocalizations.undo,
@@ -239,35 +215,35 @@ class _EditorPageState extends ConsumerState<EditorPage> {
             readOnly: readOnly,
             isMobileView: isMobileView,
           ),
-          padding: const EdgeInsets.only(
-            right: 16,
-          ),
+          padding: const EdgeInsets.only(right: 16),
           autocompleteSymbols: true,
           focusNode: _focusNode,
           scrollbarBuilder: (context, child, details) => CommonScrollBar(
-              controller: details.controller,
-              child: child,
-            ),
+            controller: details.controller,
+            child: child,
+          ),
           toolbarController: ContextMenuControllerImpl(),
           indicatorBuilder: (
             context,
             editingController,
             chunkController,
             notifier,
-          ) => Row(
-              children: [
-                DefaultCodeLineNumber(
-                  controller: editingController,
-                  notifier: notifier,
-                ),
-                DefaultCodeChunkIndicator(
-                  width: 20,
-                  controller: chunkController,
-                  notifier: notifier,
-                )
-              ],
-            ),
-          shortcutsActivatorsBuilder: const DefaultCodeShortcutsActivatorsBuilder(),
+          ) =>
+              Row(
+            children: [
+              DefaultCodeLineNumber(
+                controller: editingController,
+                notifier: notifier,
+              ),
+              DefaultCodeChunkIndicator(
+                width: 20,
+                controller: chunkController,
+                notifier: notifier,
+              )
+            ],
+          ),
+          shortcutsActivatorsBuilder:
+              const DefaultCodeShortcutsActivatorsBuilder(),
           controller: _controller,
           style: CodeEditorStyle(
             fontSize: context.textTheme.bodyLarge?.fontSize?.ap,
@@ -275,15 +251,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
             codeTheme: CodeHighlightTheme(
               languages: {
                 if (widget.languages.contains(Language.yaml))
-                  'yaml': CodeHighlightThemeMode(
-                    mode: langYaml,
-                  ),
+                  'yaml': CodeHighlightThemeMode(mode: langYaml),
                 if (widget.languages.contains(Language.javaScript))
-                  "javascript": CodeHighlightThemeMode(
-                    mode: langJavascript,
-                  ),
+                  'javascript': CodeHighlightThemeMode(mode: langJavascript),
               },
-              theme: atomOneLightTheme,
+              theme: isDark ? atomOneDarkTheme : atomOneLightTheme,
             ),
           ),
         ),
@@ -295,7 +267,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 const double _kDefaultFindPanelHeight = 52;
 
 class FindPanel extends StatelessWidget implements PreferredSizeWidget {
-
   const FindPanel({
     super.key,
     required this.controller,
@@ -305,6 +276,7 @@ class FindPanel extends StatelessWidget implements PreferredSizeWidget {
                 ? _kDefaultFindPanelHeight * 2
                 : _kDefaultFindPanelHeight) +
             8;
+
   final CodeFindController controller;
   final bool readOnly;
   final bool isMobileView;
@@ -319,19 +291,11 @@ class FindPanel extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     if (controller.value == null) {
-      return const SizedBox(
-        width: 0,
-        height: 0,
-      );
+      return const SizedBox.shrink();
     }
     return Container(
-      padding: const EdgeInsets.symmetric(
-        vertical: 12,
-        horizontal: 16,
-      ),
-      margin: const EdgeInsets.only(
-        bottom: 8,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      margin: const EdgeInsets.only(bottom: 8),
       color: context.colorScheme.surface,
       alignment: Alignment.centerLeft,
       height: height,
@@ -355,46 +319,31 @@ class FindPanel extends StatelessWidget implements PreferredSizeWidget {
             constraints: const BoxConstraints(maxWidth: 360),
             child: _buildFindInput(context, value),
           ),
-          const SizedBox(
-            width: 12,
-          ),
+          const SizedBox(width: 12),
         ],
-        Text(
-          result,
-          style: context.textTheme.bodyMedium,
-        ),
+        Text(result, style: context.textTheme.bodyMedium),
         Expanded(
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             spacing: 8,
             children: [
               _buildIconButton(
-                onPressed: value.result == null
-                    ? null
-                    : controller.previousMatch,
+                onPressed:
+                    value.result == null ? null : controller.previousMatch,
                 icon: Icons.arrow_upward,
               ),
               _buildIconButton(
-                onPressed: value.result == null
-                    ? null
-                    : controller.nextMatch,
+                onPressed: value.result == null ? null : controller.nextMatch,
                 icon: Icons.arrow_downward,
               ),
-              const SizedBox(
-                width: 2,
-              ),
+              const SizedBox(width: 2),
               IconButton.filledTonal(
                 visualDensity: VisualDensity.compact,
                 onPressed: controller.close,
                 style: const ButtonStyle(
-                  padding: WidgetStatePropertyAll(
-                    EdgeInsets.all(0),
-                  ),
+                  padding: WidgetStatePropertyAll(EdgeInsets.zero),
                 ),
-                icon: const Icon(
-                  Icons.close,
-                  size: 16,
-                ),
+                icon: const Icon(Icons.close, size: 16),
               ),
             ],
           ),
@@ -406,9 +355,7 @@ class FindPanel extends StatelessWidget implements PreferredSizeWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           bar,
-          const SizedBox(
-            height: 4,
-          ),
+          const SizedBox(height: 4),
           _buildFindInput(context, value),
         ],
       );
@@ -417,107 +364,106 @@ class FindPanel extends StatelessWidget implements PreferredSizeWidget {
   }
 
   Stack _buildFindInput(BuildContext context, CodeFindValue value) => Stack(
-      alignment: Alignment.center,
-      children: [
-        _buildTextField(
-          context: context,
-          onSubmitted: () {
-            if (value.result == null) {
-              return;
-            }
-            controller.nextMatch();
-            controller.findInputFocusNode.requestFocus();
-          },
-          controller: controller.findInputController,
-          focusNode: controller.findInputFocusNode,
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          spacing: 8,
-          children: [
-            _buildCheckText(
-              context: context,
-              text: 'Aa',
-              isSelected: value.option.caseSensitive,
-              onPressed: controller.toggleCaseSensitive,
-            ),
-            _buildCheckText(
-              context: context,
-              text: '.*',
-              isSelected: value.option.regex,
-              onPressed: controller.toggleRegex,
-            ),
-            const SizedBox(
-              width: 4,
-            ),
-          ],
-        )
-      ],
-    );
+        alignment: Alignment.center,
+        children: [
+          _buildTextField(
+            context: context,
+            onSubmitted: () {
+              if (value.result == null) {
+                return;
+              }
+              controller.nextMatch();
+              controller.findInputFocusNode.requestFocus();
+            },
+            controller: controller.findInputController,
+            focusNode: controller.findInputFocusNode,
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            spacing: 8,
+            children: [
+              _buildCheckText(
+                context: context,
+                text: 'Aa',
+                isSelected: value.option.caseSensitive,
+                onPressed: controller.toggleCaseSensitive,
+              ),
+              _buildCheckText(
+                context: context,
+                text: '.*',
+                isSelected: value.option.regex,
+                onPressed: controller.toggleRegex,
+              ),
+              const SizedBox(width: 4),
+            ],
+          )
+        ],
+      );
 
   Widget _buildTextField({
     required BuildContext context,
     required TextEditingController controller,
     required FocusNode focusNode,
     required VoidCallback onSubmitted,
-  }) => TextField(
-      maxLines: 1,
-      focusNode: focusNode,
-      style: context.textTheme.bodyMedium,
-      decoration: const InputDecoration(
-        border: OutlineInputBorder(),
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: 12,
+  }) =>
+      TextField(
+        maxLines: 1,
+        focusNode: focusNode,
+        style: context.textTheme.bodyMedium,
+        decoration: const InputDecoration(
+          border: OutlineInputBorder(),
+          contentPadding: EdgeInsets.symmetric(horizontal: 12),
         ),
-      ),
-      onSubmitted: (_) {
-        onSubmitted();
-      },
-      controller: controller,
-    );
+        onSubmitted: (_) {
+          onSubmitted();
+        },
+        controller: controller,
+      );
 
   Widget _buildCheckText({
     required BuildContext context,
     required String text,
     required bool isSelected,
     required VoidCallback onPressed,
-  }) => SizedBox(
-      width: 28,
-      height: 28,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: isSelected
-            ? IconButton.filledTonal(
-                onPressed: onPressed,
-                padding: const EdgeInsets.all(2),
-                icon: Text(text, style: context.textTheme.bodySmall),
-              )
-            : IconButton(
-                onPressed: onPressed,
-                padding: const EdgeInsets.all(2),
-                icon: Text(
-                  text,
-                  style: context.textTheme.bodySmall,
+  }) =>
+      SizedBox(
+        width: 28,
+        height: 28,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: isSelected
+              ? IconButton.filledTonal(
+                  onPressed: onPressed,
+                  padding: const EdgeInsets.all(2),
+                  icon: Text(text, style: context.textTheme.bodySmall),
+                )
+              : IconButton(
+                  onPressed: onPressed,
+                  padding: const EdgeInsets.all(2),
+                  icon: Text(text, style: context.textTheme.bodySmall),
                 ),
-              ),
-      ),
-    );
+        ),
+      );
 
   Widget _buildIconButton({
     required IconData icon,
     VoidCallback? onPressed,
-  }) => IconButton(
-      visualDensity: VisualDensity.compact,
-      onPressed: onPressed,
-      style: const ButtonStyle(padding: WidgetStatePropertyAll(EdgeInsets.all(0))),
-      icon: Icon(
-        icon,
-        size: 16,
-      ),
-    );
+  }) =>
+      IconButton(
+        visualDensity: VisualDensity.compact,
+        onPressed: onPressed,
+        style: const ButtonStyle(
+          padding: WidgetStatePropertyAll(EdgeInsets.zero),
+        ),
+        icon: Icon(icon, size: 16),
+      );
 }
 
 class ContextMenuControllerImpl implements SelectionToolbarController {
+  ContextMenuControllerImpl({this.editable = true});
+
+  final bool editable;
+
   OverlayEntry? _overlayEntry;
   bool _isFirstRender = true;
 
@@ -556,11 +502,12 @@ class ContextMenuControllerImpl implements SelectionToolbarController {
                   label: appLocalizations.copy,
                   onPressed: controller.copy,
                 ),
-              PopupMenuItemData(
-                label: appLocalizations.paste,
-                onPressed: controller.paste,
-              ),
-              if (isNotEmpty)
+              if (editable)
+                PopupMenuItemData(
+                  label: appLocalizations.paste,
+                  onPressed: controller.paste,
+                ),
+              if (editable && isNotEmpty)
                 PopupMenuItemData(
                   label: appLocalizations.cut,
                   onPressed: controller.cut,
@@ -581,20 +528,20 @@ class ContextMenuControllerImpl implements SelectionToolbarController {
               anchorBelow: anchors.secondaryAnchor ?? Offset.zero,
               children: menus.asMap().entries.map(
                 (entry) => TextSelectionToolbarTextButton(
-                    padding: TextSelectionToolbarTextButton.getPadding(
-                      entry.key,
-                      menus.length,
-                    ),
-                    alignment: AlignmentDirectional.centerStart,
-                    onPressed: () {
-                      if (entry.value.onPressed == null) {
-                        return;
-                      }
-                      entry.value.onPressed!();
-                      _removeOverLayEntry();
-                    },
-                    child: Text(entry.value.label),
+                  padding: TextSelectionToolbarTextButton.getPadding(
+                    entry.key,
+                    menus.length,
                   ),
+                  alignment: AlignmentDirectional.centerStart,
+                  onPressed: () {
+                    if (entry.value.onPressed == null) {
+                      return;
+                    }
+                    entry.value.onPressed!();
+                    _removeOverLayEntry();
+                  },
+                  child: Text(entry.value.label),
+                ),
               ).toList(),
             );
           },
@@ -607,25 +554,20 @@ class ContextMenuControllerImpl implements SelectionToolbarController {
 
 class _NoInputBorder extends InputBorder {
   const _NoInputBorder() : super(borderSide: BorderSide.none);
-
   @override
   _NoInputBorder copyWith({BorderSide? borderSide}) => const _NoInputBorder();
-
   @override
   bool get isOutline => false;
-
   @override
   EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
-
   @override
   _NoInputBorder scale(double t) => const _NoInputBorder();
-
   @override
-  Path getInnerPath(Rect rect, {TextDirection? textDirection}) => Path()..addRect(rect);
-
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) =>
+      Path()..addRect(rect);
   @override
-  Path getOuterPath(Rect rect, {TextDirection? textDirection}) => Path()..addRect(rect);
-
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) =>
+      Path()..addRect(rect);
   @override
   void paintInterior(Canvas canvas, Rect rect, Paint paint,
       {TextDirection? textDirection}) {
@@ -634,52 +576,38 @@ class _NoInputBorder extends InputBorder {
 
   @override
   bool get preferPaintInterior => true;
-
   @override
-  void paint(
-    Canvas canvas,
-    Rect rect, {
-    double? gapStart,
-    double gapExtent = 0.0,
-    double gapPercentage = 0.0,
-    TextDirection? textDirection,
-  }) {}
+  void paint(Canvas canvas, Rect rect,
+      {double? gapStart,
+      double gapExtent = 0.0,
+      double gapPercentage = 0.0,
+      TextDirection? textDirection}) {}
 }
 
 class _ImportOptionsDialog extends StatefulWidget {
   const _ImportOptionsDialog();
-
   @override
   State<_ImportOptionsDialog> createState() => _ImportOptionsDialogState();
 }
 
 class _ImportOptionsDialogState extends State<_ImportOptionsDialog> {
-  void _handleOnTab(ImportOption value) {
-    Navigator.of(context).pop(value);
-  }
+  void _handleOnTab(ImportOption value) => Navigator.of(context).pop(value);
 
   @override
   Widget build(BuildContext context) => CommonDialog(
-      title: appLocalizations.import,
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 16,
-      ),
-      child: Wrap(
-        children: [
-          ListItem(
-            onTap: () {
-              _handleOnTab(ImportOption.url);
-            },
-            title: Text(appLocalizations.importUrl),
-          ),
-          ListItem(
-            onTap: () {
-              _handleOnTab(ImportOption.file);
-            },
-            title: Text(appLocalizations.importFile),
-          )
-        ],
-      ),
-    );
+        title: appLocalizations.import,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+        child: Wrap(
+          children: [
+            ListItem(
+              onTap: () => _handleOnTab(ImportOption.url),
+              title: Text(appLocalizations.importUrl),
+            ),
+            ListItem(
+              onTap: () => _handleOnTab(ImportOption.file),
+              title: Text(appLocalizations.importFile),
+            ),
+          ],
+        ),
+      );
 }

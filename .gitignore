@@ -26,7 +26,6 @@ migrate_working_dir/
 # VS Code which you may wish to be included in version control, so this line
 # is commented out by default.
 .vscode/
-.claude/
 
 # Flutter/Dart/Pub related
 **/doc/api/
@@ -52,7 +51,13 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
-/android/build/
+
+# Local properties (contains SDK path, potentially sensitive)
+android/local.properties
+
+# Project assets
+store/
+docs/
 
 # Helper
 /services/helper/target/
@@ -67,6 +72,13 @@ app.*.map.json
 /android/app/keystore.jks
 *.jks
 
+# Firebase config (per-developer / CI secret)
+/android/app/google-services.json
+
 # Environment variables (contains sensitive data)
 .env
 *.local.sh
+
+
+# Landing page (deployed separately)
+docs/

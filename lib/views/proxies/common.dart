@@ -30,20 +30,29 @@ Future<void> proxyDelayTest(Proxy proxy, [String? testUrl]) async {
   if (state.proxyName.isEmpty) {
     return;
   }
-  appController
-    ..setDelay(
-      Delay(
-        url: url,
-        name: state.proxyName,
-        value: 0,
-      ),
-    )
-    ..setDelay(
+  appController.setDelay(
+    Delay(
+      url: url,
+      name: state.proxyName,
+      value: 0,
+    ),
+  );
+  try {
+    appController.setDelay(
       await clashCore.getDelay(
         url,
         state.proxyName,
       ),
     );
+  } catch (_) {
+    appController.setDelay(
+      Delay(
+        url: url,
+        name: state.proxyName,
+        value: -1,
+      ),
+    );
+  }
 }
 
 Future<void> delayTest(List<Proxy> proxies, [String? testUrl]) async {
@@ -59,20 +68,29 @@ Future<void> delayTest(List<Proxy> proxies, [String? testUrl]) async {
     if (name.isEmpty) {
       return;
     }
-    appController
-      ..setDelay(
-        Delay(
-          url: url,
-          name: name,
-          value: 0,
-        ),
-      )
-      ..setDelay(
+    appController.setDelay(
+      Delay(
+        url: url,
+        name: name,
+        value: 0,
+      ),
+    );
+    try {
+      appController.setDelay(
         await clashCore.getDelay(
           url,
           name,
         ),
       );
+    } catch (_) {
+      appController.setDelay(
+        Delay(
+          url: url,
+          name: name,
+          value: -1,
+        ),
+      );
+    }
   }).toList();
 
   final batchesDelayProxies = delayProxies.batch(100);
@@ -80,20 +98,4 @@ Future<void> delayTest(List<Proxy> proxies, [String? testUrl]) async {
     await Future.wait(batchDelayProxies);
   }
   appController.addSortNum();
-}
-
-double getScrollToSelectedOffset({
-  required String groupName,
-  required List<Proxy> proxies,
-}) {
-  final appController = globalState.appController;
-  final columns = appController.getProxiesColumns();
-  final proxyCardType = globalState.config.proxiesStyle.cardType;
-  final selectedProxyName = appController.getSelectedProxyName(groupName);
-  final findSelectedIndex = proxies.indexWhere(
-    (proxy) => proxy.name == selectedProxyName,
-  );
-  final selectedIndex = findSelectedIndex != -1 ? findSelectedIndex : 0;
-  final rows = (selectedIndex / columns).floor();
-  return rows * getItemHeight(proxyCardType) + (rows - 1) * 8;
 }

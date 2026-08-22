@@ -66,14 +66,24 @@ class App {
         }) ??
         false;
 
-  Future<ImageProvider?> getPackageIcon(String packageName) async {
+  final _iconCache = <String, ImageProvider?>{};
+  final _iconFutures = <String, Future<ImageProvider?>>{};
+
+  Future<ImageProvider?> getPackageIcon(String packageName) {
+    if (_iconCache.containsKey(packageName)) {
+      return Future.value(_iconCache[packageName]);
+    }
+    return _iconFutures[packageName] ??= _fetchIcon(packageName);
+  }
+
+  Future<ImageProvider?> _fetchIcon(String packageName) async {
     final base64 = await methodChannel.invokeMethod<String>("getPackageIcon", {
       "packageName": packageName,
     });
-    if (base64 == null) {
-      return null;
-    }
-    return MemoryImage(base64Decode(base64));
+    final icon = base64 != null ? MemoryImage(base64Decode(base64)) : null;
+    _iconCache[packageName] = icon;
+    _iconFutures.remove(packageName);
+    return icon;
   }
 
   Future<bool?> tip(String? message) async => methodChannel.invokeMethod<bool>("tip", {
@@ -82,12 +92,33 @@ class App {
 
   Future<bool?> initShortcuts() async => methodChannel.invokeMethod<bool>(
       "initShortcuts",
-      appLocalizations.toggle,
+      <String, String>{
+        "toggle": appLocalizations.toggle,
+        "start": appLocalizations.start,
+        "stop": appLocalizations.stop,
+      },
     );
 
   Future<bool?> updateExcludeFromRecents(bool value) async => methodChannel.invokeMethod<bool>("updateExcludeFromRecents", {
       "value": value,
     });
+
+  /// Whether the app is exempt from battery optimization (the key OEM survival
+  /// lever). Returns true on pre-M / non-Android.
+  Future<bool> isIgnoringBatteryOptimizations() async =>
+      await methodChannel.invokeMethod<bool>("isIgnoringBatteryOptimizations") ??
+      false;
+
+  /// Re-promptable battery-optimization exemption request.
+  Future<bool> requestIgnoreBatteryOptimizations() async =>
+      await methodChannel
+          .invokeMethod<bool>("requestIgnoreBatteryOptimizations") ??
+      false;
+
+  /// Opens the OEM autostart/background-start allowlist (or app details as a
+  /// fallback) so BootReceiver and sticky restarts aren't blocked at OEM level.
+  Future<bool> openAutoStartSettings() async =>
+      await methodChannel.invokeMethod<bool>("openAutoStartSettings") ?? false;
 }
 
 final app = Platform.isAndroid ? App() : null;

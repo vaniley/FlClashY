@@ -6,7 +6,9 @@ import LaunchAtLogin
 @main
 class AppDelegate: FlutterAppDelegate {
     var statusBarController: StatusBarController?
-    
+    var zashboardChannel: FlutterMethodChannel?
+    var zashboardWindowController: ZashboardWindowController?
+
     var flutterUIPopover = NSPopover.init()
     
     override init() {
@@ -35,7 +37,8 @@ class AppDelegate: FlutterAppDelegate {
         statusBarController = StatusBarController.init(flutterUIPopover)
         
         setupStatusBarChannel(flutterViewController: mainController)
-        
+        setupZashboardChannel(flutterViewController: mainController)
+
         super.applicationDidFinishLaunching(aNotification)
         
         mainFlutterWindow?.close()
@@ -64,7 +67,38 @@ class AppDelegate: FlutterAppDelegate {
         
         NSLog("StatusBar channel set up successfully")
     }
-    
+
+    func setupZashboardChannel(flutterViewController: FlutterViewController) {
+        let channel = FlutterMethodChannel(
+            name: "zashboard_window",
+            binaryMessenger: flutterViewController.engine.binaryMessenger
+        )
+        zashboardChannel = channel
+
+        channel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
+            guard let self = self else { result(nil); return }
+            switch call.method {
+            case "open":
+                guard let args = call.arguments as? [String: Any],
+                      let url = args["url"] as? String else {
+                    result(FlutterError(code: "INVALID_ARGS", message: "url required", details: nil))
+                    return
+                }
+                if self.zashboardWindowController == nil {
+                    self.zashboardWindowController = ZashboardWindowController(onClosed: { [weak self] in
+                        self?.zashboardChannel?.invokeMethod("onClosed", arguments: nil)
+                    })
+                }
+                self.zashboardWindowController?.show(urlString: url)
+                result(true)
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+
+        NSLog("Zashboard channel set up successfully")
+    }
+
     func setupCoreInApplicationSupport() {
         guard let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             print("ERROR: Could not get Application Support directory")
@@ -109,8 +143,9 @@ class AppDelegate: FlutterAppDelegate {
     }
     
     func setCorePermissions(corePath: String) -> Bool {
+        let escaped = corePath.replacingOccurrences(of: "'", with: "'\\''")
         let script = """
-        do shell script "chown root:admin '\(corePath)' && chmod +sx '\(corePath)'" with administrator privileges
+        do shell script "chown root:admin '\(escaped)' && chmod +sx '\(escaped)'" with administrator privileges
         """
         
         var error: NSDictionary?

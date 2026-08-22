@@ -137,7 +137,7 @@ class DeviceInfoService {
       model: model ?? Platform.localHostname,
       appVersion: packageInfo.version,
       platform: Platform.operatingSystem,
-      userAgent: packageInfo.ua,
+      userAgent: packageInfo.ua(appVersion: packageInfo.version),
     );
   }
 

@@ -1,8 +1,12 @@
 import 'dart:io';
 
+import 'package:flclashx/clash/core.dart';
 import 'package:flclashx/common/common.dart';
+import 'package:flclashx/common/yaml_dump.dart';
+import 'package:flclashx/enum/enum.dart';
 import 'package:flclashx/l10n/l10n.dart';
 import 'package:flclashx/models/models.dart';
+import 'package:flclashx/pages/editor.dart';
 import 'package:flclashx/providers/providers.dart';
 import 'package:flclashx/state.dart';
 import 'package:flclashx/views/about.dart';
@@ -15,6 +19,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' show dirname, join;
+import 'package:re_editor/re_editor.dart';
+import 'package:re_highlight/languages/yaml.dart';
+import 'package:re_highlight/styles/atom-one-dark.dart';
+import 'package:re_highlight/styles/atom-one-light.dart';
 
 import 'backup_and_recovery.dart';
 import 'developer.dart';
@@ -56,9 +64,11 @@ class _ToolboxViewState extends ConsumerState<ToolsView> {
   List<Widget> _getOtherList(BuildContext context, bool enableDeveloperMode) => generateSection(
       title: AppLocalizations.of(context).other,
       items: [
+        const _RuntimeConfigItem(),
         const _DisclaimerItem(),
         if (enableDeveloperMode) const _DeveloperItem(),
         const _InfoItem(),
+        const _CoreStatusItem(),
       ],
     );
 
@@ -272,6 +282,123 @@ class _SettingItem extends StatelessWidget {
   }
 }
 
+class _RuntimeConfigItem extends StatelessWidget {
+  const _RuntimeConfigItem();
+
+  @override
+  Widget build(BuildContext context) {
+    final appLocale = AppLocalizations.of(context);
+    return ListItem(
+      leading: const Icon(Icons.code),
+      title: Text(appLocale.runtimeConfig),
+      onTap: () {
+        final config = globalState.lastRuntimeConfig;
+        if (config == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(appLocale.runtimeConfigNotAvailable)),
+          );
+          return;
+        }
+
+        final buffer = StringBuffer();
+        yamlDump(buffer, config, 0);
+
+        showExtend(
+          context,
+          builder: (_, type) => _RuntimeConfigSheet(
+            type: type,
+            text: buffer.toString(),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RuntimeConfigSheet extends ConsumerStatefulWidget {
+  const _RuntimeConfigSheet({required this.type, required this.text});
+  final SheetType type;
+  final String text;
+
+  @override
+  ConsumerState<_RuntimeConfigSheet> createState() =>
+      _RuntimeConfigSheetState();
+}
+
+class _RuntimeConfigSheetState extends ConsumerState<_RuntimeConfigSheet> {
+  late final CodeLineEditingController _controller;
+  late final CodeFindController _findController;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = CodeLineEditingController.fromText(widget.text);
+    _findController = CodeFindController(_controller);
+  }
+
+  @override
+  void dispose() {
+    _findController.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobileView = ref.watch(isMobileViewProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return AdaptiveSheetScaffold(
+      type: widget.type,
+      title: AppLocalizations.of(context).runtimeConfig,
+      actions: [
+        IconButton(
+          onPressed: _findController.findMode,
+          icon: const Icon(Icons.search),
+        ),
+      ],
+      body: CodeEditor(
+        readOnly: true,
+        controller: _controller,
+        findController: _findController,
+        findBuilder: (context, controller, readOnly) => FindPanel(
+          controller: controller,
+          readOnly: readOnly,
+          isMobileView: isMobileView,
+        ),
+        padding: const EdgeInsets.only(right: 16),
+        scrollbarBuilder: (context, child, details) => CommonScrollBar(
+          controller: details.controller,
+          child: child,
+        ),
+        toolbarController: ContextMenuControllerImpl(editable: false),
+        indicatorBuilder: (
+          context,
+          editingController,
+          chunkController,
+          notifier,
+        ) =>
+            Row(
+          children: [
+            DefaultCodeLineNumber(
+              controller: editingController,
+              notifier: notifier,
+            ),
+            const SizedBox(width: 16),
+          ],
+        ),
+        style: CodeEditorStyle(
+          fontSize: context.textTheme.bodyLarge?.fontSize?.ap,
+          fontFamily: FontFamily.jetBrainsMono.value,
+          codeTheme: CodeHighlightTheme(
+            languages: {'yaml': CodeHighlightThemeMode(mode: langYaml)},
+            theme: isDark ? atomOneDarkTheme : atomOneLightTheme,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _DisclaimerItem extends StatelessWidget {
   const _DisclaimerItem();
 
@@ -322,6 +449,83 @@ class _DeveloperItem extends StatelessWidget {
         title: appLocale.developerMode,
         widget: const DeveloperView(),
       ),
+    );
+  }
+}
+
+enum _CoreState { running, restarting, stopped }
+
+class _CoreStatusItem extends StatefulWidget {
+  const _CoreStatusItem();
+
+  @override
+  State<_CoreStatusItem> createState() => _CoreStatusItemState();
+}
+
+class _CoreStatusItemState extends State<_CoreStatusItem> {
+  _CoreState _state = _CoreState.stopped;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkCoreStatus();
+  }
+
+  Future<void> _checkCoreStatus() async {
+    try {
+      final alive = await clashCore.isInit;
+      if (mounted) {
+        setState(() => _state = alive ? _CoreState.running : _CoreState.stopped);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _state = _CoreState.stopped);
+    }
+  }
+
+  Color get _statusColor => switch (_state) {
+    _CoreState.running => Colors.green,
+    _CoreState.restarting => Colors.orange,
+    _CoreState.stopped => Colors.red,
+  };
+
+  String _statusText(AppLocalizations l) => switch (_state) {
+    _CoreState.running => l.coreStatusRunning,
+    _CoreState.restarting => l.coreStatusRestarting,
+    _CoreState.stopped => l.coreStatusStopped,
+  };
+
+  Future<void> _restart() async {
+    if (_state == _CoreState.restarting) return;
+    setState(() => _state = _CoreState.restarting);
+    try {
+      await globalState.appController.restartCore();
+      if (mounted) setState(() => _state = _CoreState.running);
+    } catch (_) {
+      if (mounted) setState(() => _state = _CoreState.stopped);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appLocale = AppLocalizations.of(context);
+    return ListItem(
+      leading: Icon(Icons.memory, color: _statusColor),
+      title: Text(appLocale.restartCore),
+      subtitle: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _statusColor,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(_statusText(appLocale)),
+        ],
+      ),
+      onTap: _restart,
     );
   }
 }

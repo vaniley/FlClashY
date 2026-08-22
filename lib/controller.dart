@@ -15,7 +15,7 @@ import 'package:flclashx/widgets/dialog.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
+
 import 'package:path/path.dart' hide windows;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -28,7 +28,6 @@ import 'views/profiles/override_profile.dart';
 class AppController {
   AppController(this.context, WidgetRef ref) : _ref = ref;
   int? lastProfileModified;
-  Timer? _profileUpdateTimer;
   final BuildContext context;
   final WidgetRef _ref;
 
@@ -74,24 +73,10 @@ class AppController {
         proxyName: proxyName,
       );
       await updateGroups();
-      // Update cached server name for foreground notification
-      _updateForegroundServerName(groupName, proxyName);
     }, args: [groupName, proxyName]);
   }
 
-  /// Update cached server name in VPN plugin for foreground notification
-  /// Also sends IPC message to service isolate to update selectedMap
-  void _updateForegroundServerName(String groupName, String serverName) {
-    vpn?.updateServerName(serverName);
-    // Send IPC message to service isolate (Android only)
-    clashLib?.sendIpcMessage({
-      'action': 'updateForegroundServer',
-      'groupName': groupName,
-      'serverName': serverName,
-    });
-  }
-
-  /// Initialize foreground notification cache with current profile and server
+  /// Initialize foreground notification cache with current profile
   void initForegroundCache() {
     final profile = globalState.config.currentProfile;
     if (profile == null) return;
@@ -110,24 +95,11 @@ class AppController {
       }
     }
 
+    commonPrint.log('[initForegroundCache] profileName="$profileName" serviceName="$serviceName"');
     vpn?.updateProfileInfo(
       profileName: profileName,
       serviceName: serviceName,
     );
-
-    // Get current server name from selectedMap
-    String? groupName = profile.providerHeaders['flclashx-serverinfo'];
-    if (groupName != null && groupName.isNotEmpty) {
-      String decodedGroupName;
-      try {
-        final normalized = base64.normalize(groupName);
-        decodedGroupName = utf8.decode(base64.decode(normalized)).trim();
-      } catch (_) {
-        decodedGroupName = groupName.trim();
-      }
-      final serverName = profile.selectedMap[decodedGroupName] ?? "";
-      vpn?.updateServerName(serverName);
-    }
   }
 
   Future<void> restartCore() async {
@@ -139,16 +111,75 @@ class AppController {
     }
   }
 
-  Future<void> updateStatus(bool isStart) async {
+  // Serializes VPN toggles. A stop issued while a (possibly ~70s) start is in
+  // flight must queue behind it, never interleave — otherwise native start/stop
+  // ordering is nondeterministic and the tunnel can survive a "disconnected" UI.
+  Future<void> _statusOp = Future.value();
+  int _statusEpoch = 0;
+  // True only while a start/stop op is actually executing _updateStatus (e.g. a
+  // ~70s startVpn awaiting VPN consent). A resume-triggered resync must skip
+  // while this is set: the tunnel isn't up yet so getRunTime returns null and
+  // would clobber the optimistic startTime, tearing down a live tunnel's UI.
+  bool _statusOpInFlight = false;
+
+  Future<void> updateStatus(bool isStart) {
+    final epoch = ++_statusEpoch;
+    final op = _statusOp.then((_) async {
+      // Superseded by a newer toggle (rapid double-tap, start-then-stop): make
+      // it a no-op instead of driving a full redundant bring-up/tear-down.
+      if (epoch != _statusEpoch) return;
+      _statusOpInFlight = true;
+      try {
+        await _updateStatus(isStart);
+      } finally {
+        _statusOpInFlight = false;
+      }
+    });
+    // Keep the chain alive if one toggle throws, but still surface the error to
+    // this caller.
+    _statusOp = op.catchError((_) {});
+    return op;
+  }
+
+  Future<void> _updateStatus(bool isStart) async {
     await StatusBarManager.updateIcon(isConnected: isStart);
 
     if (isStart) {
+      // Drop the previous exit-IP immediately so the panel shows "determining" right
+      // away instead of flashing the old IP until the debounced check runs.
+      detectionState.markChecking();
       // Initialize foreground notification cache before starting
       initForegroundCache();
-      await globalState.handleStart([
-        updateRunTime,
+      final started = await globalState.handleStart([
         updateTraffic,
       ]);
+      if (!started) {
+        // Bring-up failed (VPN consent denied / establish failed): undo the
+        // optimistic "connected" UI instead of leaving a ticking-but-dead state
+        // that never self-heals.
+        await StatusBarManager.updateIcon(isConnected: false);
+        stopRunTimeTimer();
+        _ref.read(runTimeProvider.notifier).value = null;
+        addCheckIpNumDebounce();
+        return;
+      }
+      startRunTimeTimer();
+      // Android: the long-lived mihomo executor (DNS resolver, fake-ip pool,
+      // providers) survives a plain stop→start — only setupConfig/ApplyConfig
+      // rebuilds it. After a long session that state degrades, so a toggle
+      // reconnects onto a broken executor (tunnel "dies" after hours; off→on then
+      // drops instantly). Force a full re-setup on every start so a reconnect
+      // rebuilds the executor — the same thing the manual profile-switch workaround
+      // does. Desktop keeps the fast path (re-apply only when the profile changed).
+      if (Platform.isAndroid) {
+        // Direct silent re-setup, NOT applyProfileDebounce(): the debounced path
+        // runs applyProfile(silence:false), which skips entirely when the home
+        // scaffold isn't mounted (early/headless start) — exactly when recovery
+        // is needed, so the reconnect would land on the degraded executor.
+        // silence:true bypasses the scaffold gate and the 600ms debounce window.
+        unawaited(applyProfile(silence: true));
+        return;
+      }
       final currentLastModified =
           await _ref.read(currentProfileProvider)?.profileLastModified;
       if (currentLastModified == null || lastProfileModified == null) {
@@ -161,6 +192,7 @@ class AppController {
       }
       applyProfileDebounce();
     } else {
+      stopRunTimeTimer();
       await globalState.handleStop();
       clashCore.resetTraffic();
       _ref.read(trafficsProvider.notifier).clear();
@@ -168,6 +200,21 @@ class AppController {
       _ref.read(runTimeProvider.notifier).value = null;
       addCheckIpNumDebounce();
     }
+  }
+
+  Timer? _runTimeTimer;
+
+  void startRunTimeTimer() {
+    stopRunTimeTimer();
+    updateRunTime();
+    _runTimeTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      updateRunTime();
+    });
+  }
+
+  void stopRunTimeTimer() {
+    _runTimeTimer?.cancel();
+    _runTimeTimer = null;
   }
 
   void updateRunTime() {
@@ -191,8 +238,10 @@ class AppController {
   Future<void> addProfile(Profile profile) async {
     _ref.read(profilesProvider.notifier).setProfile(profile);
     if (_ref.read(currentProfileIdProvider) != null) return;
+    // Setting currentProfileId drives needSetupProvider → clash_manager →
+    // handleChangeProfile() → applyProfile(), so an explicit apply here would
+    // run setupConfig twice on the first add.
     _ref.read(currentProfileIdProvider.notifier).value = profile.id;
-    applyProfileDebounce(silence: true);
   }
 
   Future<void> deleteProfile(String id) async {
@@ -242,6 +291,8 @@ class AppController {
                 silentLaunch: effectiveSettings.contains('shadowstart'),
                 autoRun: effectiveSettings.contains('autostart'),
                 autoCheckUpdate: effectiveSettings.contains('autoupdate'),
+                openLogs: effectiveSettings.contains('openlogs'),
+                closeConnections: effectiveSettings.contains('closeconnections'),
               ));
     } catch (e) {
       // Silently ignore subscription settings errors
@@ -372,32 +423,55 @@ class AppController {
   }
 
   Future<void> updateProfile(Profile profile) async {
+    _ref.read(profilesProvider.notifier).setProfile(
+      profile.copyWith(isUpdating: true),
+    );
+    try {
     final prefs = await SharedPreferences.getInstance();
     final shouldSend = prefs.getBool('sendDeviceHeaders') ?? true;
     final newProfile = await profile.update(
       shouldSendHeaders: shouldSend,
     );
 
-    final headers = newProfile.providerHeaders;
-    if (headers.isNotEmpty) {
-      _applyAllHeaderSettings(newProfile, isNewProfile: false);
+    final mergedHeaders = Map<String, String>.from(profile.providerHeaders)
+      ..addAll(newProfile.providerHeaders);
+    for (final key in ['announce', 'support-url']) {
+      if (!newProfile.providerHeaders.containsKey(key)) {
+        mergedHeaders.remove(key);
+      }
+    }
+    final mergedProfile = newProfile.copyWith(
+      providerHeaders: mergedHeaders,
+      isUpdating: false,
+    );
+
+    // Apply the header-driven app settings (theme/flclashx-hex, flclashx-settings,
+    // flclashx-custom view/widgets, etc.) ONLY when the updated profile is the ACTIVE
+    // one. Otherwise auto-updating a background profile would push its headers into the
+    // global settings and clobber the active profile's ("last updated wins"). Mirrors
+    // the active-profile gate on applyProfileDebounce below; the reactive header
+    // providers (background / global-mode / server-info) already read the active profile.
+    if (mergedHeaders.isNotEmpty &&
+        profile.id == _ref.read(currentProfileIdProvider)) {
+      _applyAllHeaderSettings(mergedProfile, isNewProfile: false);
     }
 
-    final showHwidLimit = headers['x-hwid-limit']?.toLowerCase() == 'true';
-    final announceText = headers['announce'];
+    final showHwidLimit = mergedHeaders['x-hwid-max-devices-reached']?.toLowerCase() == 'true';
+    final announceText = mergedHeaders['announce'];
     if (showHwidLimit && announceText != null && announceText.isNotEmpty) {
-      _showHwidLimitNotice(announceText, headers['support-url']);
+      _showHwidLimitNotice(announceText, mergedHeaders['support-url']);
+    }
+
+    if (mergedHeaders['x-hwid-not-supported']?.toLowerCase() == 'true') {
+      _showHwidNotSupportedNotice();
     }
 
     _ref
         .read(profilesProvider.notifier)
-        .setProfile(newProfile.copyWith(isUpdating: false));
+        .setProfile(mergedProfile);
 
     if (profile.id == _ref.read(currentProfileIdProvider)) {
       applyProfileDebounce(silence: true);
-      unawaited(_updateGeoFilesAfterProfileUpdate().catchError((e) {
-        commonPrint.log("Error updating geo files: $e");
-      }));
     }
 
     // Check subscription expiration and show notification if needed
@@ -405,6 +479,20 @@ class AppController {
         .catchError((e) {
       commonPrint.log("Error checking subscription: $e");
     }));
+    } catch (e) {
+      _ref.read(profilesProvider.notifier).setProfile(
+        profile.copyWith(isUpdating: false),
+      );
+      rethrow;
+    }
+  }
+
+  void _showHwidNotSupportedNotice() {
+    globalState.showMessage(
+      title: 'HWID',
+      message: TextSpan(text: appLocalizations.hwidNotSupported),
+      cancelable: false,
+    );
   }
 
   void _showHwidLimitNotice(String encodedText, String? supportUrl) {
@@ -467,176 +555,6 @@ class AppController {
     }
   }
 
-  Future<Map<String, String>?> _getRemoteFileMetadata(String url) async {
-    try {
-      final response = await http.head(Uri.parse(url)).timeout(
-            const Duration(seconds: 10),
-          );
-
-      if (response.statusCode != 200) {
-        return null;
-      }
-
-      final metadata = <String, String>{};
-
-      final etag = response.headers['etag'];
-      if (etag != null && etag.isNotEmpty) {
-        metadata['etag'] = etag;
-      }
-
-      final lastModified = response.headers['last-modified'];
-      if (lastModified != null && lastModified.isNotEmpty) {
-        metadata['last-modified'] = lastModified;
-      }
-
-      final contentLength = response.headers['content-length'];
-      if (contentLength != null && contentLength.isNotEmpty) {
-        metadata['content-length'] = contentLength;
-      }
-
-      return metadata.isEmpty ? null : metadata;
-    } catch (e) {
-      commonPrint.log("Failed to get remote file metadata for $url: $e");
-      return null;
-    }
-  }
-
-  String _getMetadataKey(String profileId, String key) =>
-      'geo_metadata_${profileId}_$key';
-
-  Future<Map<String, String>?> _getSavedMetadata(
-      String profileId, String key) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final storageKey = _getMetadataKey(profileId, key);
-      final jsonString = prefs.getString(storageKey);
-      if (jsonString == null) return null;
-      return Map<String, String>.from(json.decode(jsonString));
-    } catch (e) {
-      return null;
-    }
-  }
-
-  Future<void> _saveMetadata(
-      String profileId, String key, Map<String, String> metadata) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final storageKey = _getMetadataKey(profileId, key);
-      await prefs.setString(storageKey, json.encode(metadata));
-    } catch (e) {
-      commonPrint.log("Failed to save metadata for $key: $e");
-    }
-  }
-
-  bool _hasMetadataChanged(
-      Map<String, String>? oldMeta, Map<String, String>? newMeta) {
-    if (oldMeta == null || newMeta == null) return true;
-
-    if (newMeta['etag'] != null && oldMeta['etag'] != null) {
-      return newMeta['etag'] != oldMeta['etag'];
-    }
-
-    if (newMeta['last-modified'] != null && oldMeta['last-modified'] != null) {
-      return newMeta['last-modified'] != oldMeta['last-modified'];
-    }
-
-    if (newMeta['content-length'] != null &&
-        oldMeta['content-length'] != null) {
-      return newMeta['content-length'] != oldMeta['content-length'];
-    }
-
-    return true;
-  }
-
-  Future<void> _updateGeoFilesAfterProfileUpdate(
-      {bool forceUpdate = false}) async {
-    try {
-      final currentProfileId = _ref.read(currentProfileIdProvider);
-      if (currentProfileId == null) return;
-
-      final profileConfig =
-          await globalState.getProfileConfig(currentProfileId);
-
-      final geodataMode = profileConfig["geodata-mode"];
-      if (geodataMode != true) {
-        commonPrint.log(
-            "Geodata updates are disabled by profile (geodata-mode != true)");
-        return;
-      }
-
-      final geoXUrl = profileConfig["geox-url"];
-
-      if (geoXUrl == null || geoXUrl is! Map) {
-        commonPrint.log("No geox-url found in profile config");
-        return;
-      }
-
-      final geoFiles = [
-        {'type': 'GeoIp', 'name': geoIpFileName, 'key': 'geoip'},
-        {'type': 'MMDB', 'name': mmdbFileName, 'key': 'mmdb'},
-        {'type': 'GeoSite', 'name': geoSiteFileName, 'key': 'geosite'},
-        {'type': 'ASN', 'name': asnFileName, 'key': 'asn'},
-      ];
-
-      // Counters for logging purposes (values used in log messages via increment)
-      // ignore: unused_local_variable
-      var updatedCount = 0;
-      // ignore: unused_local_variable
-      var skippedCount = 0;
-
-      for (final geoFile in geoFiles) {
-        final geoType = geoFile['type']!;
-        final fileName = geoFile['name']!;
-        final key = geoFile['key']!;
-
-        final url = geoXUrl[key];
-        if (url == null || url is! String || url.isEmpty) {
-          commonPrint.log("No URL for $fileName, skipping");
-          continue;
-        }
-
-        try {
-          final remoteMetadata = await _getRemoteFileMetadata(url);
-          if (remoteMetadata == null) {
-            commonPrint.log("Failed to get metadata for $fileName from $url");
-            continue;
-          }
-
-          final savedMetadata = await _getSavedMetadata(currentProfileId, key);
-
-          if (!forceUpdate &&
-              !_hasMetadataChanged(savedMetadata, remoteMetadata)) {
-            commonPrint.log(
-                "$fileName is up to date for profile $currentProfileId, skipping download");
-            skippedCount++;
-            continue;
-          }
-
-          final reason = forceUpdate ? "force update" : "metadata changed";
-          commonPrint.log(
-              "$fileName needs update for profile $currentProfileId ($reason), downloading from $url...");
-          final result = await clashCore.updateGeoData(
-            UpdateGeoDataParams(geoType: geoType, geoName: fileName),
-          );
-
-          if (result.isNotEmpty) {
-            commonPrint.log("Failed to update $fileName: $result");
-            continue;
-          }
-
-          await _saveMetadata(currentProfileId, key, remoteMetadata);
-          commonPrint.log(
-              "$fileName was successfully updated for profile $currentProfileId from $url");
-          updatedCount++;
-        } catch (e) {
-          commonPrint.log("Failed to update $fileName: $e");
-        }
-      }
-    } catch (e) {
-      commonPrint.log("Failed to update geo files after profile update: $e");
-    }
-  }
-
   void setProfile(Profile profile) {
     _ref.read(profilesProvider.notifier).setProfile(profile);
   }
@@ -667,10 +585,6 @@ class AppController {
       _ref.read(hotKeyActionsProvider.notifier).value = List.from(hotKeyActions)
         ..[index] = hotKeyAction;
     }
-
-    _ref.read(hotKeyActionsProvider.notifier).value = index == -1
-        ? (List.from(hotKeyActions)..add(hotKeyAction))
-        : (List.from(hotKeyActions)..[index] = hotKeyAction);
   }
 
   List<Group> getCurrentGroups() =>
@@ -711,6 +625,24 @@ class AppController {
     await commonScaffoldState?.loadingRun(() async {
       await _updateClashConfig();
     });
+  }
+
+  /// Flip the core's external-controller API on/off for a zashboard session
+  /// (see openZashboard / ZashboardWebViewPage). Reuses the same updateConfig
+  /// path as the manual toggle, so the core brings the API listener up/down
+  /// live. updateConfig does NOT recompute effectiveExternalController (that's
+  /// the applyProfile path), so set it here too — the zashboard URL reads it.
+  Future<void> setExternalControllerEnabled(bool enable) async {
+    _ref.read(patchClashConfigProvider.notifier).updateState(
+          (state) => state.copyWith(
+            externalController: enable
+                ? ExternalControllerStatus.open
+                : ExternalControllerStatus.close,
+          ),
+        );
+    globalState.effectiveExternalController.value =
+        enable ? ExternalControllerStatus.open.value : "";
+    await updateClashConfig();
   }
 
   Future<void> _updateClashConfig() async {
@@ -801,26 +733,38 @@ class AppController {
       pathConfig: realPatchConfig,
     );
     final message = await clashCore.setupConfig(params);
+    if (message.isNotEmpty) {
+      // Don't advance lastProfileModified on a failed/timed-out setup: doing so
+      // would make the next start's recovery re-apply think the profile is
+      // already applied and skip it, leaving a degraded executor in place.
+      throw message;
+    }
     lastProfileModified = await _ref.read(
       currentProfileProvider.select(
         (state) => state?.profileLastModified,
       ),
     );
-    if (message.isNotEmpty) {
-      throw message;
-    }
   }
 
-  Future _applyProfile() async {
+  Future _applyProfile({bool silence = false}) async {
     clashCore.requestGc();
-    await setupClashConfig();
+    if (silence) {
+      // Silent/headless/early-start recovery: bypass the PUBLIC setupClashConfig()
+      // scaffold gate + loadingRun (which no-ops when the home scaffold isn't
+      // mounted — exactly when recovery is needed — and shows a loading overlay
+      // when it is) by re-applying through the private path directly.
+      await _setupClashConfig();
+    } else {
+      await setupClashConfig();
+    }
     await updateGroups();
     await updateProviders();
+    initForegroundCache();
   }
 
   Future applyProfile({bool silence = false}) async {
     if (silence) {
-      await _applyProfile();
+      await _applyProfile(silence: true);
     } else {
       final commonScaffoldState = globalState.homeScaffoldKey.currentState;
       if (commonScaffoldState?.mounted != true) return;
@@ -829,6 +773,9 @@ class AppController {
       });
     }
     addCheckIpNumDebounce();
+    // Re-persist cold-start params so tile/widget/Always-on headless restarts reflect
+    // the currently active profile, not a stale one from app init.
+    unawaited(_persistColdStartParams());
   }
 
   void handleChangeProfile() {
@@ -848,16 +795,11 @@ class AppController {
     }
 
     applyProfile();
-    _ref.read(logsProvider.notifier).value = FixedList(500);
-    _ref.read(requestsProvider.notifier).value = FixedList(500);
+    _ref.read(logsProvider.notifier).value = FixedList(maxLength);
+    _ref.read(requestsProvider.notifier).value = FixedList(maxLength);
     globalState.cacheHeightMap = {};
     globalState.cacheScrollPosition = {};
 
-    if (currentProfileId != null) {
-      _updateGeoFilesAfterProfileUpdate(forceUpdate: true).catchError((e) {
-        commonPrint.log("Error updating geo files on profile change: $e");
-      });
-    }
   }
 
   void updateBrightness(Brightness brightness) {
@@ -917,6 +859,20 @@ class AppController {
       commonPrint.log(
           "Updating subscription info for current profile '${currentProfile.label}' on startup...");
       if (currentProfile.autoUpdate) {
+        // autoUpdateProfiles() (fired immediately on startup) already refreshes
+        // any auto-update profile whose update window has elapsed (or that never
+        // updated). Skip those here so we don't fetch+apply the same current
+        // profile a second time 1s later; only handle the not-yet-due case it
+        // leaves untouched.
+        final isDue = currentProfile.lastUpdateDate
+                ?.add(currentProfile.autoUpdateDuration)
+                .isBeforeNow ??
+            true;
+        if (isDue) {
+          commonPrint.log(
+              "_updateCurrentProfileSubscription: already covered by autoUpdateProfiles, skipping");
+          return;
+        }
         await updateProfile(currentProfile);
         commonPrint.log("Subscription info updated successfully");
       } else {
@@ -929,6 +885,39 @@ class AppController {
     }
   }
 
+  /// When the profile declares an explicit GLOBAL proxy-group, restrict the
+  /// core's auto-generated GLOBAL group to exactly those members, in the
+  /// declared order. Names not present in the core's GLOBAL are skipped; an
+  /// empty/absent override (or one that matches nothing) leaves groups as-is.
+  List<Group> _applyGlobalGroupOverride(List<Group> groups) {
+    final order = globalState.globalGroupOrder.value;
+    if (order.isEmpty) return groups;
+    final index = groups.indexWhere((g) => g.name == GroupName.GLOBAL.name);
+    if (index == -1) return groups;
+    final global = groups[index];
+    final byName = {for (final p in global.all) p.name: p};
+    final groupByName = {for (final g in groups) g.name: g};
+    final curated = <Proxy>[];
+    for (final name in order) {
+      final existing = byName[name];
+      if (existing != null) {
+        curated.add(existing);
+        continue;
+      }
+      // Name declared in GLOBAL but missing from the core's GLOBAL.all (e.g. a
+      // referenced group). Synthesize it from the full group list so the
+      // curated list stays complete; selection/now resolves through groups.
+      final group = groupByName[name];
+      if (group != null) {
+        curated.add(Proxy(name: group.name, type: group.type.value));
+      }
+    }
+    if (curated.isEmpty) return groups;
+    final result = List<Group>.from(groups);
+    result[index] = global.copyWith(all: curated);
+    return result;
+  }
+
   Future<void> updateGroups() async {
     try {
       final newGroups = await retry(
@@ -937,7 +926,8 @@ class AppController {
       );
 
       if (newGroups.isNotEmpty) {
-        _ref.read(groupsProvider.notifier).value = newGroups;
+        _ref.read(groupsProvider.notifier).value =
+            _applyGlobalGroupOverride(newGroups);
         _ref.read(versionProvider.notifier).value =
             _ref.read(versionProvider) + 1;
       } else {
@@ -977,10 +967,26 @@ class AppController {
       clashCore.closeConnections();
     }
     addCheckIpNumDebounce();
+    // Android: re-persist cold-start params so a later headless restart (tile/
+    // Always-on/sticky) brings the tunnel up with the NEWLY selected node, not
+    // the one captured at app init. Without this, "picked a server, phone sat
+    // idle, VPN auto-reconnected to the old one". changeProxy is debounced, so
+    // this runs at most once per debounce window.
+    if (Platform.isAndroid && globalState.isStart) {
+      unawaited(_persistColdStartParams());
+    }
   }
 
   Future<void> handleBackOrExit() async {
     if (_ref.read(backBlockProvider)) {
+      return;
+    }
+    // Android: the back gesture must never shut the core down while the tunnel
+    // is up — the FGS + TUN are designed to outlive the UI, and handleExit()
+    // would kill the executor under a live VPN icon (blackholed traffic).
+    // Background the activity instead, regardless of minimizeOnExit.
+    if (Platform.isAndroid && globalState.isStart) {
+      await system.back();
       return;
     }
     if (_ref.read(appSettingProvider).minimizeOnExit) {
@@ -1002,14 +1008,33 @@ class AppController {
   }
 
   Future<void> handleExit() async {
-    _profileUpdateTimer?.cancel();
-    Future.delayed(commonDuration, system.exit);
+    // Bound the cleanup instead of pre-arming a 300ms hard-exit timer. On macOS the
+    // DNS/proxy teardown is several slow networksetup/route subprocesses that easily
+    // overrun 300ms, so the old timer fired mid-cleanup and exit(0) skipped the DNS
+    // restore / proxy stop / core shutdown — leaking 1.1.1.1, leaving a dead system
+    // proxy, and orphaning the root core. Mirror handleRestart: run cleanup under a
+    // generous deadline, each step isolated, then always exit.
     try {
-      await savePreferences();
-      await system.setMacOSDns(true);
-      await proxy?.stopProxy();
-      await clashCore.shutdown();
-      await clashService?.destroy();
+      await Future.any([
+        Future(() async {
+          try {
+            await savePreferences();
+          } catch (_) {}
+          try {
+            await system.setMacOSDns(true);
+          } catch (_) {}
+          try {
+            await proxy?.stopProxy();
+          } catch (_) {}
+          try {
+            await clashCore.shutdown();
+          } catch (_) {}
+          try {
+            await clashService?.destroy();
+          } catch (_) {}
+        }),
+        Future.delayed(const Duration(seconds: 8)),
+      ]);
     } finally {
       system.exit();
     }
@@ -1017,6 +1042,25 @@ class AppController {
 
   Future<void> handleRestart() async {
     commonPrint.log("Starting application restart...");
+
+    // Stop the current core BEFORE relaunching so the new instance can connect
+    // cleanly: a core that survives the restart (notably the Windows helper-started
+    // process) keeps the socket/binary busy and blocks the fresh core from binding
+    // or replacing the updated .exe. Guarded by a timeout so the restart can't hang.
+    await Future.any([
+      Future(() async {
+        try {
+          await proxy?.stopProxy();
+        } catch (_) {}
+        try {
+          await clashCore.shutdown();
+        } catch (_) {}
+        try {
+          await clashService?.destroy();
+        } catch (_) {}
+      }),
+      Future.delayed(const Duration(seconds: 3)),
+    ]);
 
     if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
       final executablePath = Platform.resolvedExecutable;
@@ -1184,7 +1228,40 @@ class AppController {
         globalState.getCoreState(),
       );
     }
+    // Re-assert the log subscription on every attach. startLog() lives inside
+    // clashCore.init(), which is skipped above when the core is already
+    // initialised — e.g. after a headless tile/always-on cold-start the core is
+    // isInit==true with no log subscriber, so Logs would stay empty until a full
+    // process kill. startLog/stopLog are idempotent (resubscribe), so re-issuing
+    // on every launch/attach is safe and fixes empty Logs without re-init.
+    if (globalState.config.appSetting.openLogs) {
+      clashCore.startLog();
+    } else {
+      clashCore.stopLog();
+    }
     await applyProfile();
+  }
+
+  Future<void> _persistColdStartParams() async {
+    if (clashLib == null) return;
+    try {
+      final clashConfig = globalState.config.patchClashConfig.copyWith.tun(
+        enable: false,
+      );
+      final setupParams = await globalState.getSetupParams(
+        pathConfig: clashConfig,
+      );
+      unawaited(clashLib?.saveParamsForColdStart(
+        initParams: InitParams(
+          homeDir: await appPath.homeDirPath,
+          version: await system.version,
+        ),
+        setupParams: setupParams,
+        state: globalState.getCoreState(),
+      ));
+    } catch (e) {
+      commonPrint.log("persistColdStartParams: $e");
+    }
   }
 
   Future<void> init() async {
@@ -1192,7 +1269,14 @@ class AppController {
       commonPrint.log(details.stack.toString());
     };
     updateTray(true);
-    await _initCore();
+    // Desktop only (clashService is null on Android): on an unexpected core-process
+    // death, respawn it AND re-init/re-apply (and re-start the tunnel if it was up).
+    clashService?.onCoreCrash = (_) => restartCore();
+    try {
+      await _initCore();
+    } catch (e) {
+      commonPrint.log("initCore failed (will retry on profile change): $e");
+    }
     await _initStatus();
     autoLaunch?.updateStatus(
       _ref.read(appSettingProvider).autoLaunch,
@@ -1216,7 +1300,15 @@ class AppController {
 
   Future<void> _initStatus() async {
     if (Platform.isAndroid) {
-      await globalState.updateStartTime();
+      final known = await globalState.updateStartTime();
+      if (!known) {
+        // Probe failed → tunnel state unknown. Don't drive updateStatus(false):
+        // it sends a stop intent that kills a possibly-live VPN service (the
+        // classic "opened the app and VPN dropped" on slow-binding OEMs).
+        // Leave native state untouched; the resumed-resync picks up the truth.
+        addCheckIpNumDebounce();
+        return;
+      }
     }
     final status = globalState.isStart == true
         ? true
@@ -1224,6 +1316,34 @@ class AppController {
 
     await updateStatus(status);
     if (!status) {
+      addCheckIpNumDebounce();
+    }
+  }
+
+  /// Aligns UI run-state with the native truth after a resume. STOP/START can
+  /// be missed while the process is frozen or killed (fire-and-forget tile
+  /// channel, lost broadcasts), leaving a ticking "connected" UI over a dead
+  /// tunnel — or a "disconnected" UI over a live one. Never sends start/stop
+  /// IPC; only local state is touched.
+  Future<void> syncVpnStateOnResume() async {
+    // A start/stop toggle is mid-flight (e.g. a ~70s startVpn still awaiting VPN
+    // consent): its optimistic startTime isn't reflected by getRunTime yet, so
+    // re-probing now would null it and tear down a live tunnel's UI. The
+    // in-flight op sets the correct run-state on completion, so just skip.
+    if (_statusOpInFlight) return;
+    final known = await globalState.updateStartTime();
+    if (!known) return;
+    final running = globalState.isStart;
+    await StatusBarManager.updateIcon(isConnected: running);
+    if (running) {
+      globalState.startUpdateTasks();
+      startRunTimeTimer();
+    } else {
+      stopRunTimeTimer();
+      globalState.stopUpdateTasks();
+      _ref.read(runTimeProvider.notifier).value = null;
+      _ref.read(trafficsProvider.notifier).clear();
+      _ref.read(totalTrafficProvider.notifier).value = Traffic();
       addCheckIpNumDebounce();
     }
   }
@@ -1312,7 +1432,6 @@ class AppController {
     if (globalState.navigatorKey.currentState?.canPop() ?? false) {
       globalState.navigatorKey.currentState?.popUntil((route) => route.isFirst);
     }
-    toPage(PageLabel.dashboard);
     final commonScaffoldState = globalState.homeScaffoldKey.currentState;
     if (commonScaffoldState?.mounted != true) return;
 
@@ -1330,10 +1449,13 @@ class AppController {
         _applyAllHeaderSettings(profile, isNewProfile: true);
 
         final headers = profile.providerHeaders;
-        final showHwidLimit = headers['x-hwid-limit']?.toLowerCase() == 'true';
+        final showHwidLimit = headers['x-hwid-max-devices-reached']?.toLowerCase() == 'true';
         final announceText = headers['announce'];
         if (showHwidLimit && announceText != null && announceText.isNotEmpty) {
           _showHwidLimitNotice(announceText, headers['support-url']);
+        }
+        if (headers['x-hwid-not-supported']?.toLowerCase() == 'true') {
+          _showHwidNotSupportedNotice();
         }
 
         await addProfile(profile);
@@ -1343,6 +1465,29 @@ class AppController {
       unawaited(
           globalState.showMessage(message: TextSpan(text: err.toString())));
     }
+  }
+
+  /// Download, validate and add a profile from [url] WITHOUT any navigation or
+  /// global loading overlay. Used by the TV phone-sync receive dialog so it can
+  /// keep its own UI alive and report the real apply result back to the phone.
+  /// Throws on failure (network / invalid config) so the caller can surface it.
+  Future<void> addProfileFromUrlForSync(String url) async {
+    final prefs = await SharedPreferences.getInstance();
+    final shouldSend = prefs.getBool('sendDeviceHeaders') ?? true;
+    final profile =
+        await Profile.normal(url: url).update(shouldSendHeaders: shouldSend);
+    _applyAllHeaderSettings(profile, isNewProfile: true);
+    final headers = profile.providerHeaders;
+    final showHwidLimit =
+        headers['x-hwid-max-devices-reached']?.toLowerCase() == 'true';
+    final announceText = headers['announce'];
+    if (showHwidLimit && announceText != null && announceText.isNotEmpty) {
+      _showHwidLimitNotice(announceText, headers['support-url']);
+    }
+    if (headers['x-hwid-not-supported']?.toLowerCase() == 'true') {
+      _showHwidNotSupportedNotice();
+    }
+    await addProfile(profile);
   }
 
   Future<Null> addProfileFormFile() async {
@@ -1409,11 +1554,12 @@ class AppController {
                 testUrl: testUrl,
               ),
             );
-            if (aDelay == null && bDelay == null) {
-              return 0;
-            }
+            // null (untested) and -1 (failed) are equivalent "no delay"
+            // sentinels: map both to the same rank so the comparator stays
+            // antisymmetric (compare(a,b) == -compare(b,a)) and they sort to
+            // the end together.
             if (aDelay == null || aDelay == -1) {
-              return 1;
+              return (bDelay == null || bDelay == -1) ? 0 : 1;
             }
             if (bDelay == null || bDelay == -1) {
               return -1;
@@ -1465,6 +1611,16 @@ class AppController {
 
   void _applyCustomViewSettings(Profile profile) {
     final headers = profile.providerHeaders;
+
+    // New-look dashboard: writes the user-facing `newDashboard` setting. Gated by
+    // the caller's flclashx-custom policy (update => every apply, add => only on
+    // first add), and the settings toggle stays user-controllable afterwards.
+    final newboard = headers['flclashx-newboard'];
+    if (newboard == 'true' || newboard == 'false') {
+      _ref.read(appSettingProvider.notifier).updateState(
+            (state) => state.copyWith(newDashboard: newboard == 'true'),
+          );
+    }
 
     final dashboardLayout = headers['flclashx-widgets'];
     if (dashboardLayout != null && dashboardLayout.isNotEmpty) {

@@ -16,12 +16,18 @@ class AppPath {
     appDirPath = join(dirname(Platform.resolvedExecutable));
     getApplicationSupportDirectory().then((value) {
       dataDir.complete(value);
+    }).catchError((e) {
+      dataDir.completeError(e);
     });
     getTemporaryDirectory().then((value) {
       tempDir.complete(value);
+    }).catchError((e) {
+      tempDir.completeError(e);
     });
     getDownloadsDirectory().then((value) {
       downloadDir.complete(value);
+    }).catchError((e) {
+      downloadDir.completeError(e);
     });
   }
   static AppPath? _instance;
@@ -46,6 +52,13 @@ class AppPath {
     }
     return join(executableDirPath, "FlClashCore$executableExtension");
   }
+
+  String get corePendingPath => '$corePath.pending';
+
+  /// Allow-list consumed by the Windows helper service; lives next to the
+  /// helper exe so per-machine installs keep it admin-writable only.
+  String get allowedCoreHashPath =>
+      join(executableDirPath, "allowed_core.sha256");
 
   String get helperPath => join(executableDirPath, "$appHelperService$executableExtension");
 

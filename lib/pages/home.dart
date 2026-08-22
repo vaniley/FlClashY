@@ -5,6 +5,7 @@ import 'package:flclashx/enum/enum.dart';
 import 'package:flclashx/models/models.dart';
 import 'package:flclashx/providers/providers.dart';
 import 'package:flclashx/state.dart';
+import 'package:flclashx/views/dashboard/widgets/hero_nav_bar.dart';
 import 'package:flclashx/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,8 +33,12 @@ class HomePage extends StatelessWidget {
               navigationItems: navigationItems,
               currentIndex: currentIndex,
             );
-            final bottomNavigationBar =
-                viewMode == ViewMode.mobile ? navigationBar : null;
+            // Mobile bottom bar follows the dashboard style: the hero nav bar for
+            // the new look, the classic Material NavigationBar for the old one.
+            final newDashboard = ref.watch(newDashboardEnabledProvider);
+            final bottomNavigationBar = viewMode == ViewMode.mobile
+                ? (newDashboard ? const HeroNavBar() : navigationBar)
+                : null;
             final sideNavigationBar =
                 viewMode != ViewMode.mobile ? navigationBar : null;
             return CommonScaffold(
@@ -189,105 +194,114 @@ class CommonNavigationBar extends ConsumerWidget {
     final showLabel = ref.watch(appSettingProvider).showLabel;
     return Material(
       color: context.colorScheme.surfaceContainer,
-      child: Column(
-        children: [
-          // App logo at the top of sidebar
-          if (!Platform.isMacOS) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Column(
-                children: [
-                  const SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: CircleAvatar(
-                      foregroundImage: AssetImage("assets/images/icon.png"),
-                      backgroundColor: Colors.transparent,
-                    ),
-                  ),
-                  if (showLabel) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      appName,
-                      style: context.textTheme.labelSmall?.copyWith(
-                        color: context.colorScheme.onSurfaceVariant,
+      // SafeArea: the app draws edge-to-edge, so on tablets/foldables (which
+      // also get the desktop-style side rail) the status bar overlapped the
+      // logo. Shifts the whole logo+rail block below the system inset; no-op
+      // on desktop OSes.
+      child: SafeArea(
+        bottom: false,
+        right: false,
+        child: Column(
+          children: [
+            // App logo at the top of sidebar
+            if (!Platform.isMacOS) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  children: [
+                    const SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: CircleAvatar(
+                        foregroundImage: AssetImage("assets/images/icon.png"),
+                        backgroundColor: Colors.transparent,
                       ),
                     ),
+                    if (showLabel) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        appName,
+                        style: context.textTheme.labelSmall?.copyWith(
+                          color: context.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Divider(
-              height: 1,
-              indent: 12,
-              endIndent: 12,
-              color: context.colorScheme.outlineVariant.withValues(alpha: 0.5),
-            ),
-          ],
-          Expanded(
-            child: ScrollConfiguration(
-              behavior: HiddenBarScrollBehavior(),
-              child: SingleChildScrollView(
-                child: IntrinsicHeight(
-                  child: NavigationRail(
-                    backgroundColor: context.colorScheme.surfaceContainer,
-                    selectedIconTheme: IconThemeData(
-                      color: context.colorScheme.onSurfaceVariant,
-                    ),
-                    unselectedIconTheme: IconThemeData(
-                      color: context.colorScheme.onSurfaceVariant,
-                    ),
-                    selectedLabelTextStyle:
-                        context.textTheme.labelLarge!.copyWith(
-                      color: context.colorScheme.onSurface,
-                    ),
-                    unselectedLabelTextStyle:
-                        context.textTheme.labelLarge!.copyWith(
-                      color: context.colorScheme.onSurface,
-                    ),
-                    destinations: navigationItems
-                        .map(
-                          (e) => NavigationRailDestination(
-                            icon: e.icon,
-                            label: Text(
-                              Intl.message(e.label.name),
+              const SizedBox(height: 8),
+              Divider(
+                height: 1,
+                indent: 12,
+                endIndent: 12,
+                color:
+                    context.colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ],
+            Expanded(
+              child: ScrollConfiguration(
+                behavior: HiddenBarScrollBehavior(),
+                child: SingleChildScrollView(
+                  child: IntrinsicHeight(
+                    child: NavigationRail(
+                      backgroundColor: context.colorScheme.surfaceContainer,
+                      selectedIconTheme: IconThemeData(
+                        color: context.colorScheme.onSurfaceVariant,
+                      ),
+                      unselectedIconTheme: IconThemeData(
+                        color: context.colorScheme.onSurfaceVariant,
+                      ),
+                      selectedLabelTextStyle:
+                          context.textTheme.labelLarge!.copyWith(
+                        color: context.colorScheme.onSurface,
+                      ),
+                      unselectedLabelTextStyle:
+                          context.textTheme.labelLarge!.copyWith(
+                        color: context.colorScheme.onSurface,
+                      ),
+                      destinations: navigationItems
+                          .map(
+                            (e) => NavigationRailDestination(
+                              icon: e.icon,
+                              label: Text(
+                                Intl.message(e.label.name),
+                              ),
                             ),
-                          ),
-                        )
-                        .toList(),
-                    onDestinationSelected: (index) {
-                      globalState.appController
-                          .toPage(navigationItems[index].label);
-                    },
-                    extended: false,
-                    selectedIndex: currentIndex,
-                    labelType: showLabel
-                        ? NavigationRailLabelType.all
-                        : NavigationRailLabelType.none,
+                          )
+                          .toList(),
+                      onDestinationSelected: (index) {
+                        globalState.appController
+                            .toPage(navigationItems[index].label);
+                      },
+                      extended: false,
+                      selectedIndex: currentIndex,
+                      labelType: showLabel
+                          ? NavigationRailLabelType.all
+                          : NavigationRailLabelType.none,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(
-            height: 16,
-          ),
-          IconButton(
-            onPressed: () {
-              ref.read(appSettingProvider.notifier).updateState(
-                    (state) => state.copyWith(
-                      showLabel: !state.showLabel,
-                    ),
-                  );
-            },
-            icon: const Icon(Icons.menu),
-          ),
-          const SizedBox(
-            height: 16,
-          ),
-        ],
+            const SizedBox(
+              height: 16,
+            ),
+            IconButton(
+              onPressed: () {
+                ref.read(appSettingProvider.notifier).updateState(
+                      (state) => state.copyWith(
+                        showLabel: !state.showLabel,
+                      ),
+                    );
+              },
+              icon: const Icon(Icons.menu),
+            ),
+            const SizedBox(
+              height: 16,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -316,14 +330,15 @@ class _NavigationBarDefaultsM3 extends NavigationBarThemeData {
 
   @override
   WidgetStateProperty<IconThemeData?>? get iconTheme =>
-      WidgetStateProperty.resolveWith((Set<WidgetState> states) => IconThemeData(
-            size: 24.0,
-            color: states.contains(WidgetState.disabled)
-                ? _colors.onSurfaceVariant.opacity38
-                : states.contains(WidgetState.selected)
-                    ? _colors.onSecondaryContainer
-                    : _colors.onSurfaceVariant,
-          ));
+      WidgetStateProperty.resolveWith(
+          (Set<WidgetState> states) => IconThemeData(
+                size: 24.0,
+                color: states.contains(WidgetState.disabled)
+                    ? _colors.onSurfaceVariant.opacity38
+                    : states.contains(WidgetState.selected)
+                        ? _colors.onSecondaryContainer
+                        : _colors.onSurfaceVariant,
+              ));
 
   @override
   Color? get indicatorColor => _colors.secondaryContainer;
@@ -333,8 +348,8 @@ class _NavigationBarDefaultsM3 extends NavigationBarThemeData {
 
   @override
   WidgetStateProperty<TextStyle?>? get labelTextStyle =>
-      WidgetStateProperty.resolveWith((Set<WidgetState> states) =>
-          _textTheme.labelMedium!.apply(
+      WidgetStateProperty.resolveWith(
+          (Set<WidgetState> states) => _textTheme.labelMedium!.apply(
               overflow: TextOverflow.ellipsis,
               color: states.contains(WidgetState.disabled)
                   ? _colors.onSurfaceVariant.opacity38

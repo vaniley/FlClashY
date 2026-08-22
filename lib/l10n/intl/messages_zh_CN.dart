@@ -36,9 +36,9 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m7(count) => "已选择 ${count} 项";
 
-  static String m8(label) => "${label}必须为URL";
+  static String m8(days) => "您的订阅将在${days}天后到期";
 
-  static String m9(days) => "您的订阅将在${days}天后到期";
+  static String m9(label) => "${label}必须为URL";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -73,6 +73,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "allowBypassDesc": MessageLookupByLibrary.simpleMessage("开启后部分应用可绕过VPN"),
     "allowLan": MessageLookupByLibrary.simpleMessage("局域网代理"),
     "allowLanDesc": MessageLookupByLibrary.simpleMessage("允许通过局域网访问代理"),
+    "announcement": MessageLookupByLibrary.simpleMessage("公告"),
     "app": MessageLookupByLibrary.simpleMessage("应用"),
     "appAccessControl": MessageLookupByLibrary.simpleMessage("应用访问控制"),
     "appDesc": MessageLookupByLibrary.simpleMessage("处理应用相关设置"),
@@ -90,6 +91,10 @@ class MessageLookup extends MessageLookupByLibrary {
     "autoRun": MessageLookupByLibrary.simpleMessage("自动运行"),
     "autoRunDesc": MessageLookupByLibrary.simpleMessage("应用打开时自动运行"),
     "autoSetSystemDns": MessageLookupByLibrary.simpleMessage("自动设置系统DNS"),
+    "autoStart": MessageLookupByLibrary.simpleMessage("自启动"),
+    "autoStartDesc": MessageLookupByLibrary.simpleMessage(
+      "允许后台自启动，使 VPN 在重启和更新后仍能恢复（MIUI/EMUI 等）",
+    ),
     "autoUpdate": MessageLookupByLibrary.simpleMessage("自动更新"),
     "autoUpdateInterval": MessageLookupByLibrary.simpleMessage("自动更新间隔（分钟）"),
     "backup": MessageLookupByLibrary.simpleMessage("备份"),
@@ -100,6 +105,10 @@ class MessageLookup extends MessageLookupByLibrary {
     "backupSuccess": MessageLookupByLibrary.simpleMessage("备份成功"),
     "basicConfig": MessageLookupByLibrary.simpleMessage("基本配置"),
     "basicConfigDesc": MessageLookupByLibrary.simpleMessage("全局修改基本配置"),
+    "batteryOptimization": MessageLookupByLibrary.simpleMessage("电池优化"),
+    "batteryOptimizationDesc": MessageLookupByLibrary.simpleMessage(
+      "将应用加入白名单，避免系统在后台杀死 VPN",
+    ),
     "bind": MessageLookupByLibrary.simpleMessage("绑定"),
     "blacklistMode": MessageLookupByLibrary.simpleMessage("黑名单模式"),
     "bypassDomain": MessageLookupByLibrary.simpleMessage("排除域名"),
@@ -108,6 +117,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "cancel": MessageLookupByLibrary.simpleMessage("取消"),
     "cancelFilterSystemApp": MessageLookupByLibrary.simpleMessage("取消过滤系统应用"),
     "cancelSelectAll": MessageLookupByLibrary.simpleMessage("取消全选"),
+    "change": MessageLookupByLibrary.simpleMessage("切换"),
     "changeServer": MessageLookupByLibrary.simpleMessage("切换服务器"),
     "checkError": MessageLookupByLibrary.simpleMessage("检测失败"),
     "checkUpdate": MessageLookupByLibrary.simpleMessage("检查更新"),
@@ -141,6 +151,10 @@ class MessageLookup extends MessageLookupByLibrary {
     "coreInfo": MessageLookupByLibrary.simpleMessage("内核信息"),
     "country": MessageLookupByLibrary.simpleMessage("区域"),
     "crashTest": MessageLookupByLibrary.simpleMessage("崩溃测试"),
+    "crashlytics": MessageLookupByLibrary.simpleMessage("崩溃报告"),
+    "crashlyticsDesc": MessageLookupByLibrary.simpleMessage(
+      "通过 Firebase Crashlytics 自动上传崩溃日志，不包含敏感信息",
+    ),
     "create": MessageLookupByLibrary.simpleMessage("创建"),
     "cut": MessageLookupByLibrary.simpleMessage("剪切"),
     "dark": MessageLookupByLibrary.simpleMessage("深色"),
@@ -159,6 +173,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "基于ClashMeta的多平台代理客户端，简单易用，开源无广告。",
     ),
     "detectionTip": MessageLookupByLibrary.simpleMessage("依赖第三方api，仅供参考"),
+    "determiningIp": MessageLookupByLibrary.simpleMessage("正在获取 IP..."),
     "developerMode": MessageLookupByLibrary.simpleMessage("开发者模式"),
     "developerModeEnableTip": MessageLookupByLibrary.simpleMessage("开发者模式已启用。"),
     "direct": MessageLookupByLibrary.simpleMessage("直连"),
@@ -173,6 +188,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "doYouWantToPass": MessageLookupByLibrary.simpleMessage("添加配置文件从"),
     "domain": MessageLookupByLibrary.simpleMessage("域名"),
     "download": MessageLookupByLibrary.simpleMessage("下载"),
+    "downloadingZashboard": MessageLookupByLibrary.simpleMessage(
+      "正在下载 Zashboard…",
+    ),
     "edit": MessageLookupByLibrary.simpleMessage("编辑"),
     "emptyTip": m2,
     "en": MessageLookupByLibrary.simpleMessage("英语"),
@@ -190,7 +208,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "expressiveScheme": MessageLookupByLibrary.simpleMessage("表现力"),
     "externalController": MessageLookupByLibrary.simpleMessage("外部控制器"),
     "externalControllerDesc": MessageLookupByLibrary.simpleMessage(
-      "开启后将可以通过 API 控制 Clash 内核",
+      "开启后将可以通过9090端口控制Clash内核",
     ),
     "externalLink": MessageLookupByLibrary.simpleMessage("外部链接"),
     "externalResources": MessageLookupByLibrary.simpleMessage("外部资源"),
@@ -203,6 +221,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "file": MessageLookupByLibrary.simpleMessage("文件"),
     "fileDesc": MessageLookupByLibrary.simpleMessage("直接上传配置文件"),
     "fileIsUpdate": MessageLookupByLibrary.simpleMessage("文件有修改，是否保存修改"),
+    "fileTooLarge": MessageLookupByLibrary.simpleMessage("文件过大"),
     "filterSystemApp": MessageLookupByLibrary.simpleMessage("过滤系统应用"),
     "findProcessMode": MessageLookupByLibrary.simpleMessage("查找进程"),
     "findProcessModeDesc": MessageLookupByLibrary.simpleMessage("开启后会有一定性能损耗"),
@@ -255,6 +274,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "local": MessageLookupByLibrary.simpleMessage("本地"),
     "localBackupDesc": MessageLookupByLibrary.simpleMessage("备份数据到本地"),
     "localRecoveryDesc": MessageLookupByLibrary.simpleMessage("通过文件恢复数据"),
+    "locations": MessageLookupByLibrary.simpleMessage("节点"),
     "logLevel": MessageLookupByLibrary.simpleMessage("日志等级"),
     "logcat": MessageLookupByLibrary.simpleMessage("日志捕获"),
     "logcatDesc": MessageLookupByLibrary.simpleMessage("禁用将会隐藏日志入口"),
@@ -317,6 +337,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "开启后，将只统计代理流量",
     ),
     "openLogsFolder": MessageLookupByLibrary.simpleMessage("打开日志文件夹"),
+    "openPanel": MessageLookupByLibrary.simpleMessage("打开面板"),
     "options": MessageLookupByLibrary.simpleMessage("选项"),
     "originalRepository": MessageLookupByLibrary.simpleMessage("原始存储库"),
     "other": MessageLookupByLibrary.simpleMessage("其他"),
@@ -403,6 +424,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "remoteRecoveryDesc": MessageLookupByLibrary.simpleMessage("通过WebDAV恢复数据"),
     "remove": MessageLookupByLibrary.simpleMessage("移除"),
     "rename": MessageLookupByLibrary.simpleMessage("重命名"),
+    "renew": MessageLookupByLibrary.simpleMessage("续订"),
     "requests": MessageLookupByLibrary.simpleMessage("请求"),
     "requestsDesc": MessageLookupByLibrary.simpleMessage("查看最近请求记录"),
     "reset": MessageLookupByLibrary.simpleMessage("重置"),
@@ -424,6 +446,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "ruleName": MessageLookupByLibrary.simpleMessage("规则名称"),
     "ruleProviders": MessageLookupByLibrary.simpleMessage("规则提供者"),
     "ruleTarget": MessageLookupByLibrary.simpleMessage("规则目标"),
+    "running": MessageLookupByLibrary.simpleMessage("运行中"),
     "save": MessageLookupByLibrary.simpleMessage("保存"),
     "saveChanges": MessageLookupByLibrary.simpleMessage("是否保存更改？"),
     "saveTip": MessageLookupByLibrary.simpleMessage("确定要保存吗？"),
@@ -462,16 +485,21 @@ class MessageLookup extends MessageLookupByLibrary {
     "stackMode": MessageLookupByLibrary.simpleMessage("栈模式"),
     "standard": MessageLookupByLibrary.simpleMessage("标准"),
     "start": MessageLookupByLibrary.simpleMessage("启动"),
-    "running": MessageLookupByLibrary.simpleMessage("运行中"),
     "startVpn": MessageLookupByLibrary.simpleMessage("正在启动VPN..."),
     "status": MessageLookupByLibrary.simpleMessage("状态"),
     "statusDesc": MessageLookupByLibrary.simpleMessage("关闭后将使用系统DNS"),
     "stop": MessageLookupByLibrary.simpleMessage("暂停"),
-    "stopped": MessageLookupByLibrary.simpleMessage("已停止"),
     "stopVpn": MessageLookupByLibrary.simpleMessage("正在停止VPN..."),
+    "stopped": MessageLookupByLibrary.simpleMessage("已停止"),
     "style": MessageLookupByLibrary.simpleMessage("风格"),
     "subRule": MessageLookupByLibrary.simpleMessage("子规则"),
     "submit": MessageLookupByLibrary.simpleMessage("提交"),
+    "subscriptionExpired": MessageLookupByLibrary.simpleMessage("您的订阅已过期"),
+    "subscriptionExpiresInDays": m8,
+    "subscriptionExpiresSoon": MessageLookupByLibrary.simpleMessage("订阅即将到期"),
+    "subscriptionExpiresToday": MessageLookupByLibrary.simpleMessage(
+      "您的订阅今天到期",
+    ),
     "support": MessageLookupByLibrary.simpleMessage("支持"),
     "sync": MessageLookupByLibrary.simpleMessage("同步"),
     "system": MessageLookupByLibrary.simpleMessage("系统"),
@@ -517,7 +545,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("上传"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
     "urlDesc": MessageLookupByLibrary.simpleMessage("通过URL获取配置文件"),
-    "urlTip": m8,
+    "urlTip": m9,
     "useHosts": MessageLookupByLibrary.simpleMessage("使用Hosts"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage("使用系统Hosts"),
     "value": MessageLookupByLibrary.simpleMessage("值"),
@@ -534,18 +562,10 @@ class MessageLookup extends MessageLookupByLibrary {
     "webDAVConfiguration": MessageLookupByLibrary.simpleMessage("WebDAV配置"),
     "whitelistMode": MessageLookupByLibrary.simpleMessage("白名单模式"),
     "years": MessageLookupByLibrary.simpleMessage("年"),
+    "zashboardInApp": MessageLookupByLibrary.simpleMessage("在应用内打开 zashboard"),
+    "zashboardInAppDesc": MessageLookupByLibrary.simpleMessage(
+      "使用内置浏览器显示控制面板，无需跳转到外部浏览器",
+    ),
     "zh_CN": MessageLookupByLibrary.simpleMessage("中文简体"),
-    "subscriptionExpiresSoon": MessageLookupByLibrary.simpleMessage(
-      "订阅即将到期",
-    ),
-    "subscriptionExpiresInDays": m9,
-    "subscriptionExpiresToday": MessageLookupByLibrary.simpleMessage(
-      "您的订阅今天到期",
-    ),
-    "subscriptionExpired": MessageLookupByLibrary.simpleMessage(
-      "您的订阅已过期",
-    ),
-    "renew": MessageLookupByLibrary.simpleMessage("续订"),
-    "announcement": MessageLookupByLibrary.simpleMessage("公告"),
   };
 }

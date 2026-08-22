@@ -1,3 +1,4 @@
+import 'package:flclashx/clash/clash.dart';
 import 'package:flclashx/common/common.dart';
 import 'package:flclashx/enum/enum.dart';
 import 'package:flclashx/models/models.dart';
@@ -21,27 +22,23 @@ class ProxiesView extends ConsumerStatefulWidget {
 }
 
 class _ProxiesViewState extends ConsumerState<ProxiesView> with PageMixin {
-  final GlobalKey<ProxiesTabViewState> _proxiesTabKey = GlobalKey();
   bool _hasProviders = false;
   bool _isTab = false;
 
   Future<void> _pingAllGroups() async {
+    // Fan out the per-group delay test (the same path the per-group ping button uses
+    // and is known to update every member) across all groups in parallel — each group
+    // tests its OWN full member list with its OWN test URL. This is both parallel and
+    // correct, unlike collecting a flat unique list where group names only resolve to
+    // their active member and inactive hosts (e.g. in SERVERS) never get tested.
     final groups = ref.read(currentGroupsStateProvider).value;
-    final allProxies = <Proxy>[];
-    final seenNames = <String>{};
-    
-    for (final group in groups) {
-      for (final proxy in group.all) {
-        if (!seenNames.contains(proxy.name)) {
-          seenNames.add(proxy.name);
-          allProxies.add(proxy);
-        }
-      }
+    if (groups.isEmpty) {
+      await clashCore.healthCheck();
+      return;
     }
-    
-    if (allProxies.isNotEmpty) {
-      await delayTest(allProxies, null);
-    }
+    await Future.wait(
+      groups.map((group) => delayTest(group.all, group.testUrl)),
+    );
   }
 
   @override
@@ -55,23 +52,14 @@ class _ProxiesViewState extends ConsumerState<ProxiesView> with PageMixin {
           child: const _ModeSelectorAction(),
         ),
         const SearchOrderMarker(),
-        if (_isTab)
-          IconButton(
-            onPressed: () {
-              _proxiesTabKey.currentState?.scrollToGroupSelected();
-            },
-            icon: const Icon(
-              Icons.adjust,
-              weight: 1,
-            ),
+        IconButton(
+          tooltip: appLocalizations.testAllDelay,
+          onPressed: _pingAllGroups,
+          icon: const Icon(
+            Icons.network_ping,
           ),
+        ),
         if (!_isTab) ...[
-          IconButton(
-            onPressed: _pingAllGroups,
-            icon: const Icon(
-              Icons.network_ping,
-            ),
-          ),
           Consumer(
             builder: (_, ref, __) {
               final unfoldSet = ref.watch(unfoldSetProvider);
@@ -83,6 +71,9 @@ class _ProxiesViewState extends ConsumerState<ProxiesView> with PageMixin {
               final allExpanded = groupNames.isNotEmpty &&
                   groupNames.every(unfoldSet.contains);
               return IconButton(
+                tooltip: allExpanded
+                    ? appLocalizations.collapseAll
+                    : appLocalizations.expandAll,
                 onPressed: () {
                   if (allExpanded) {
                     globalState.appController.updateCurrentUnfoldSet({});
@@ -171,15 +162,6 @@ class _ProxiesViewState extends ConsumerState<ProxiesView> with PageMixin {
   }
 
   @override
-  DelayTestButton? get floatingActionButton => _isTab
-      ? DelayTestButton(
-          onClick: () async {
-            await _proxiesTabKey.currentState?.delayTestCurrentGroup();
-          },
-        )
-      : null;
-
-  @override
   void initState() {
     ref.listenManual(
       proxiesActionsStateProvider,
@@ -228,9 +210,7 @@ class _ProxiesViewState extends ConsumerState<ProxiesView> with PageMixin {
       ),
     );
     return switch (proxiesType) {
-      ProxiesType.tab => ProxiesTabView(
-          key: _proxiesTabKey,
-        ),
+      ProxiesType.tab => const ProxiesTabView(),
       ProxiesType.list => const ProxiesListView(),
     };
   }
@@ -259,7 +239,7 @@ class _ModeSelectorAction extends ConsumerWidget {
 
     return CommonPopupBox(
       targetBuilder: (open) => IconButton(
-        tooltip: _modeLabel(context, mode),
+        tooltip: appLocalizations.action_mode,
         onPressed: () => open(offset: const Offset(0, 20)),
         icon: Icon(_modeIcon(mode)),
       ),

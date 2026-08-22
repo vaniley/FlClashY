@@ -27,6 +27,8 @@ _$AppSettingPropsImpl _$$AppSettingPropsImplFromJson(
       minimizeOnExit: json['minimizeOnExit'] as bool? ?? false,
       hidden: json['hidden'] as bool? ?? false,
       developerMode: json['developerMode'] as bool? ?? false,
+      crashlytics: json['crashlytics'] as bool? ?? true,
+      zashboardInApp: json['zashboardInApp'] as bool? ?? true,
       overrideProviderSettings:
           json['overrideProviderSettings'] as bool? ?? false,
       overrideNetworkSettings:
@@ -34,6 +36,7 @@ _$AppSettingPropsImpl _$$AppSettingPropsImplFromJson(
       recoveryStrategy: $enumDecodeNullable(
               _$RecoveryStrategyEnumMap, json['recoveryStrategy']) ??
           RecoveryStrategy.compatible,
+      newDashboard: json['newDashboard'] as bool?,
     );
 
 Map<String, dynamic> _$$AppSettingPropsImplToJson(
@@ -57,9 +60,12 @@ Map<String, dynamic> _$$AppSettingPropsImplToJson(
       'minimizeOnExit': instance.minimizeOnExit,
       'hidden': instance.hidden,
       'developerMode': instance.developerMode,
+      'crashlytics': instance.crashlytics,
+      'zashboardInApp': instance.zashboardInApp,
       'overrideProviderSettings': instance.overrideProviderSettings,
       'overrideNetworkSettings': instance.overrideNetworkSettings,
       'recoveryStrategy': _$RecoveryStrategyEnumMap[instance.recoveryStrategy]!,
+      'newDashboard': instance.newDashboard,
     };
 
 const _$RecoveryStrategyEnumMap = {
@@ -82,6 +88,7 @@ const _$DashboardWidgetEnumMap = {
   DashboardWidget.memoryInfo: 'memoryInfo',
   DashboardWidget.changeServerButton: 'changeServerButton',
   DashboardWidget.serviceInfo: 'serviceInfo',
+  DashboardWidget.zashboardButton: 'zashboardButton',
 };
 
 _$AccessControlImpl _$$AccessControlImplFromJson(Map<String, dynamic> json) =>
@@ -267,7 +274,7 @@ _$ThemePropsImpl _$$ThemePropsImplFromJson(Map<String, dynamic> json) =>
               .toList() ??
           defaultPrimaryColors,
       themeMode: $enumDecodeNullable(_$ThemeModeEnumMap, json['themeMode']) ??
-          ThemeMode.dark,
+          ThemeMode.system,
       schemeVariant: $enumDecodeNullable(
               _$DynamicSchemeVariantEnumMap, json['schemeVariant']) ??
           DynamicSchemeVariant.content,

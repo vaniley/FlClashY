@@ -27,7 +27,9 @@ class Window {
     await windowManager.ensureInitialized();
     final windowOptions = WindowOptions(
       size: Size(props.width, props.height),
-      minimumSize: const Size(380, 400),
+      // Lock the minimum window size to 380×600 so it can't be shrunk below that
+      // in either dimension — only grown.
+      minimumSize: const Size(380, 600),
     );
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
     if (!Platform.isMacOS) {

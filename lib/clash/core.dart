@@ -6,6 +6,7 @@ import 'dart:isolate';
 import 'package:flclashx/clash/clash.dart';
 import 'package:flclashx/clash/interface.dart';
 import 'package:flclashx/common/common.dart';
+import 'package:flclashx/common/process_icon.dart';
 import 'package:flclashx/enum/enum.dart';
 import 'package:flclashx/models/models.dart';
 import 'package:flclashx/state.dart';
@@ -80,6 +81,8 @@ class ClashCore {
 
   Future<bool> setState(CoreState state) => clashInterface.setState(state);
 
+  Future<bool> setUiActive(bool active) => clashInterface.setUiActive(active);
+
   Future<void> shutdown() async {
     await clashInterface.shutdown();
   }
@@ -95,18 +98,40 @@ class ClashCore {
   Future<List<Group>> getProxiesGroups() async {
     final proxies = await clashInterface.getProxies();
     if (proxies.isEmpty) return [];
-    final groupNames = [
-      UsedProxy.GLOBAL.name,
-      ...(proxies[UsedProxy.GLOBAL.name]["all"] as List).where((e) {
-        final proxy = proxies[e] ?? {};
-        return GroupTypeExtension.valueList.contains(proxy['type']);
-      })
-    ];
+    bool isGroup(dynamic name) =>
+        GroupTypeExtension.valueList.contains((proxies[name] ?? {})['type']);
+    // Groups reachable through GLOBAL.all, keeping GLOBAL's own ordering.
+    final fromGlobal =
+        (((proxies[UsedProxy.GLOBAL.name] ?? {})["all"] ?? []) as List)
+            .where(isGroup)
+            .toList();
+    final groupNames = [UsedProxy.GLOBAL.name, ...fromGlobal];
+    // Only when GLOBAL opts in via `flclashx-override`: a curated GLOBAL lists
+    // just a subset, so the service groups used by rules (YouTube, Telegram, …)
+    // wouldn't otherwise surface. Enumerate them from the full proxy map so
+    // every defined group is available (the hidden flag still controls display).
+    if (globalState.globalOverrideEnabled.value) {
+      final seen = {UsedProxy.GLOBAL.name, ...fromGlobal};
+      // proxies.keys arrive alphabetically (Go's json.Marshal sorts map keys),
+      // so enumerate in profile-declaration order first, then append any leftover
+      // groups not named in proxy-groups (still alphabetical, but a rare tail).
+      final declared = globalState.proxyGroupOrder.value;
+      final extra = declared
+          .where((name) => !seen.contains(name) && isGroup(name))
+          .toList();
+      groupNames.addAll(extra);
+      seen.addAll(extra);
+      groupNames.addAll(
+        proxies.keys.where((name) => !seen.contains(name) && isGroup(name)),
+      );
+    }
     final groupsRaw = groupNames.map((groupName) {
-      final group = proxies[groupName];
+      final group = Map<String, dynamic>.from(proxies[groupName] as Map);
       group["all"] = ((group["all"] ?? []) as List)
           .map(
-            (name) => proxies[name],
+            (name) => proxies[name] != null
+                ? Map<String, dynamic>.from(proxies[name] as Map)
+                : null,
           )
           .where((proxy) => proxy != null)
           .toList();
@@ -114,7 +139,7 @@ class ClashCore {
     }).toList();
     return groupsRaw
         .map(
-          (e) => Group.fromJson(e),
+          (e) => Group.fromJson(Map<String, dynamic>.from(e)),
         )
         .toList();
   }
@@ -125,7 +150,25 @@ class ClashCore {
     final res = await clashInterface.getConnections();
     final connectionsData = json.decode(res) as Map;
     final connectionsRaw = connectionsData['connections'] as List? ?? [];
-    return connectionsRaw.map((e) => Connection.fromJson(e)).toList();
+    // Rebuild the id->processPath map from scratch each poll so it only holds
+    // live connection ids; it used to grow unbounded as ids were only appended.
+    final livePaths = <String, String>{};
+    final connections = connectionsRaw.map((e) {
+      final map = Map<String, dynamic>.from(e as Map);
+      // Capture processPath (dropped by the Connection model) so desktop can show the
+      // originating app's exe icon.
+      final meta = map['metadata'];
+      final id = map['id']?.toString();
+      if (meta is Map && id != null) {
+        final pp = meta['processPath']?.toString() ?? '';
+        if (pp.isNotEmpty) livePaths[id] = pp;
+      }
+      return Connection.fromJson(map);
+    }).toList();
+    connectionProcessPaths
+      ..clear()
+      ..addAll(livePaths);
+    return connections;
   }
 
   void closeConnection(String id) {
@@ -166,9 +209,6 @@ class ClashCore {
     if (externalProvidersRawString.isEmpty) {
       return null;
     }
-    if (externalProvidersRawString.isEmpty) {
-      return null;
-    }
     return ExternalProvider.fromJson(json.decode(externalProvidersRawString));
   }
 
@@ -192,6 +232,8 @@ class ClashCore {
     await clashInterface.stopListener();
   }
 
+  Future<void> healthCheck([String groupName = '']) => clashInterface.healthCheck(groupName);
+
   Future<Delay> getDelay(String url, String proxyName) async {
     final data = await clashInterface.asyncTestDelay(url, proxyName);
     return Delay.fromJson(json.decode(data));
@@ -201,7 +243,7 @@ class ClashCore {
     final profilePath = await appPath.getProfilePath(id);
     final res = await clashInterface.getConfig(profilePath);
     if (res.isSuccess) {
-      return res.data as Map<String, dynamic>;
+      return Map<String, dynamic>.from(res.data as Map);
     } else {
       throw res.message;
     }
@@ -239,7 +281,15 @@ class ClashCore {
     if (value.isEmpty) {
       return 0;
     }
-    return int.parse(value);
+    return int.tryParse(value) ?? 0;
+  }
+
+  Future<String> getCoreVersion() async {
+    try {
+      return await clashInterface.getCoreVersion();
+    } catch (_) {
+      return '';
+    }
   }
 
   void resetTraffic() {

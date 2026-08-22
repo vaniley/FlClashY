@@ -22,12 +22,25 @@ JavaVM *global_java_vm() {
     return global_vm;
 }
 
+static char *empty_c_string() {
+    const auto s = static_cast<char *>(malloc(1));
+    s[0] = 0;
+    return s;
+}
+
 char *jni_get_string(JNIEnv *env, jstring str) {
+    if (str == nullptr) return empty_c_string();
     const auto array = reinterpret_cast<jbyteArray>(env->CallObjectMethod(str, m_get_bytes));
+    if (env->ExceptionCheck() || array == nullptr) {
+        env->ExceptionClear();
+        if (array) env->DeleteLocalRef(array);
+        return empty_c_string();
+    }
     const int length = env->GetArrayLength(array);
     const auto content = static_cast<char *>(malloc(length + 1));
     env->GetByteArrayRegion(array, 0, length, reinterpret_cast<jbyte *>(content));
     content[length] = 0;
+    env->DeleteLocalRef(array);
     return content;
 }
 
@@ -35,7 +48,9 @@ jstring jni_new_string(JNIEnv *env, const char *str) {
     const auto length = static_cast<int>(strlen(str));
     const auto array = env->NewByteArray(length);
     env->SetByteArrayRegion(array, 0, length, reinterpret_cast<const jbyte *>(str));
-    return reinterpret_cast<jstring>(env->NewObject(c_string, m_new_string, array));
+    const auto result = reinterpret_cast<jstring>(env->NewObject(c_string, m_new_string, array));
+    env->DeleteLocalRef(array);
+    return result;
 }
 
 int jni_catch_exception(JNIEnv *env) {
@@ -49,12 +64,19 @@ int jni_catch_exception(JNIEnv *env) {
 
 void jni_attach_thread(scoped_jni *jni) {
     JavaVM *vm = global_java_vm();
+    if (vm == nullptr) {
+        jni->env = nullptr;
+        jni->require_release = 0;
+        return;
+    }
     if (vm->GetEnv(reinterpret_cast<void **>(&jni->env), JNI_VERSION_1_6) == JNI_OK) {
         jni->require_release = 0;
         return;
     }
     if (vm->AttachCurrentThread(&jni->env, nullptr) != JNI_OK) {
-        abort();
+        jni->env = nullptr;
+        jni->require_release = 0;
+        return;
     }
     jni->require_release = 1;
 }

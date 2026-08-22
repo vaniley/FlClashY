@@ -84,7 +84,7 @@ const (
 	asyncTestDelayMethod           Method = "asyncTestDelay"
 	getConnectionsMethod           Method = "getConnections"
 	closeConnectionsMethod         Method = "closeConnections"
-	resetConnectionsMethod         Method = "resetConnectionsMethod"
+	resetConnectionsMethod         Method = "resetConnections"
 	closeConnectionMethod          Method = "closeConnection"
 	getExternalProvidersMethod     Method = "getExternalProviders"
 	getExternalProviderMethod      Method = "getExternalProvider"
@@ -106,6 +106,10 @@ const (
 	setupConfigMethod              Method = "setupConfig"
 	getConfigMethod                Method = "getConfig"
 	getCoreVersionMethod           Method = "getCoreVersion"
+	healthCheckMethod              Method = "healthCheck"
+	healthProbeMethod              Method = "healthProbe"
+	setUiActiveMethod              Method = "setUiActive"
+	setScreenActiveMethod          Method = "setScreenActive"
 )
 
 type Method string

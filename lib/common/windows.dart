@@ -25,64 +25,37 @@ class Windows {
   late DynamicLibrary _shell32;
   late DynamicLibrary _uxtheme;
 
-  bool isDarkMode() {
+  bool _readThemeValue(String valueName) {
     try {
-      final keyPath =
-          r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
-              .toNativeUtf16();
-      final valueName = 'AppsUseLightTheme'.toNativeUtf16();
+      return using((arena) {
+        final keyPath =
+            r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+                .toNativeUtf16(allocator: arena);
+        final valueNamePtr = valueName.toNativeUtf16(allocator: arena);
+        final phkResult = arena<HKEY>();
 
-      final phkResult = calloc<HKEY>();
-      var result = RegOpenKeyEx(
-        HKEY_CURRENT_USER,
-        keyPath,
-        0,
-        KEY_READ,
-        phkResult,
-      );
+        var result = RegOpenKeyEx(HKEY_CURRENT_USER, keyPath, 0, KEY_READ, phkResult);
+        if (result != ERROR_SUCCESS) return false;
 
-      calloc.free(keyPath);
+        final hKey = phkResult.value;
+        final data = arena<DWORD>();
+        final dataSize = arena<DWORD>();
+        dataSize.value = sizeOf<DWORD>();
 
-      if (result != ERROR_SUCCESS) {
-        calloc.free(valueName);
-        calloc.free(phkResult);
-        return false;
-      }
+        result = RegQueryValueEx(hKey, valueNamePtr, nullptr, nullptr, data.cast(), dataSize);
+        RegCloseKey(hKey);
+        if (result != ERROR_SUCCESS) return false;
 
-      final hKey = phkResult.value;
-      calloc.free(phkResult);
-
-      final data = calloc<DWORD>();
-      final dataSize = calloc<DWORD>();
-      dataSize.value = sizeOf<DWORD>();
-
-      result = RegQueryValueEx(
-        hKey,
-        valueName,
-        nullptr,
-        nullptr,
-        data.cast(),
-        dataSize,
-      );
-
-      calloc.free(valueName);
-      RegCloseKey(hKey);
-
-      if (result != ERROR_SUCCESS) {
-        calloc.free(data);
-        calloc.free(dataSize);
-        return false;
-      }
-
-      final isLightMode = data.value != 0;
-      calloc.free(data);
-      calloc.free(dataSize);
-
-      return !isLightMode;
+        return data.value == 0;
+      });
     } catch (e) {
       return false;
     }
   }
+
+  bool isDarkMode() => _readThemeValue('AppsUseLightTheme');
+
+  bool isSystemDarkMode() => _readThemeValue('SystemUsesLightTheme');
 
   void enableDarkModeForApp() {
     try {
@@ -143,8 +116,12 @@ class Windows {
             flushMenuThemes();
           }
         }
-      } catch (e) {}
-    } catch (e) {}
+      } catch (_) {
+      // FFI call may fail on unsupported Windows versions
+    }
+    } catch (_) {
+      // FFI call may fail on unsupported Windows versions
+    }
   }
 
   void applyDarkModeToMenu(int hwnd) {
@@ -163,12 +140,16 @@ class Windows {
                 Pointer<Utf16> pszSubIdList)>('SetWindowTheme');
 
         setWindowTheme(hwnd, themeName, nullptr);
-      } catch (e) {}
+      } catch (_) {
+      // FFI call may fail on unsupported Windows versions
+    }
 
       if (themeName != nullptr) {
         calloc.free(themeName);
       }
-    } catch (e) {}
+    } catch (_) {
+      // FFI call may fail on unsupported Windows versions
+    }
   }
 
   bool runas(String command, String arguments) {
@@ -258,6 +239,7 @@ class Windows {
 
     await _killProcess(helperPort);
 
+    final coreHash = await coreUpdater.calcCoreSha256();
     final command = [
       "/c",
       if (status == WindowsHelperServiceStatus.presence) ...[
@@ -275,6 +257,14 @@ class Windows {
       "sc",
       "start",
       appHelperService,
+      // Sync the helper's core allow-list while elevation is already granted,
+      // so a previously updated core isn't refused by a stale hash.
+      if (coreHash != null) ...[
+        "&&",
+        "echo",
+        '$coreHash>',
+        '"${appPath.allowedCoreHashPath}"',
+      ],
     ].join(" ");
 
     final res = runas("cmd.exe", command);

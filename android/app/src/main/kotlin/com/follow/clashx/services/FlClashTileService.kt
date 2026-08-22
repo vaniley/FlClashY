@@ -1,112 +1,95 @@
 package com.follow.clashx.services
 
+import android.content.ComponentName
+import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
-import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.Observer
 import com.follow.clashx.GlobalState
 import com.follow.clashx.RunState
 
-
 @RequiresApi(Build.VERSION_CODES.N)
 class FlClashXTileService : TileService() {
 
     companion object {
-        private const val TAG = "FlClashTileService"
-    }
-
-    private val observer = Observer<RunState> { runState ->
-        Log.d(TAG, "Observer: runState changed to $runState")
-        updateTile(runState)
-    }
-
-    private fun updateTile(runState: RunState) {
-        Log.d(TAG, "updateTile called: runState=$runState")
-        if (qsTile != null) {
-            // Check if there's an active profile first
-            val hasProfile = GlobalState.hasActiveProfile()
-            Log.d(TAG, "hasProfile=$hasProfile")
-            
-            qsTile.state = if (!hasProfile) {
-                // No profile selected - tile unavailable
-                Log.d(TAG, "Setting tile to UNAVAILABLE (no profile)")
-                Tile.STATE_UNAVAILABLE
-            } else {
-                // Profile exists - show state based on VPN status
-                val state = when (runState) {
-                    RunState.START -> Tile.STATE_ACTIVE
-                    RunState.PENDING -> Tile.STATE_UNAVAILABLE
-                    RunState.STOP -> Tile.STATE_INACTIVE
-                }
-                Log.d(TAG, "Setting tile state based on runState: $state")
-                state
-            }
-            qsTile.updateTile()
-        } else {
-            Log.w(TAG, "qsTile is null, cannot update")
+        fun requestUpdate(context: Context) {
+            requestListeningState(
+                context,
+                ComponentName(context, FlClashXTileService::class.java),
+            )
         }
+
+        @Volatile
+        private var lastClickTime: Long = 0L
+        private const val DEBOUNCE_MS = 500L
     }
+
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val syncRunnable = Runnable { syncTile() }
+
+    // Debounce: collapse rapid successive runState changes into a single tile update
+    // so the icon doesn't flicker when state briefly oscillates during start/stop.
+    private fun syncTileDebounced() {
+        mainHandler.removeCallbacks(syncRunnable)
+        mainHandler.postDelayed(syncRunnable, 80L)
+    }
+
+    private val observer = Observer<RunState> { syncTileDebounced() }
 
     override fun onStartListening() {
-        Log.d(TAG, "onStartListening called")
         super.onStartListening()
         GlobalState.syncStatus()
-        val currentState = GlobalState.runState.value
-        Log.d(TAG, "Current runState: $currentState")
-        currentState?.let { updateTile(it) }
+        syncTile()
         GlobalState.runState.observeForever(observer)
-        Log.d(TAG, "Observer attached")
     }
 
     override fun onStopListening() {
-        Log.d(TAG, "onStopListening called")
+        mainHandler.removeCallbacks(syncRunnable)
         GlobalState.runState.removeObserver(observer)
         super.onStopListening()
     }
 
     override fun onClick() {
-        Log.d(TAG, "onClick called, current tile state: ${qsTile?.state}")
-        
-        // Use unlockAndRun to prevent service from being killed during long operations
-        unlockAndRun {
-            Log.d(TAG, "Inside unlockAndRun")
-            when (qsTile?.state) {
-                Tile.STATE_INACTIVE -> {
-                    Log.d(TAG, "Tile INACTIVE -> calling handleStart()")
-                    GlobalState.handleStart()
-                }
-                Tile.STATE_ACTIVE -> {
-                    Log.d(TAG, "Tile ACTIVE -> calling handleStop()")
-                    GlobalState.handleStop()
-                }
-                Tile.STATE_UNAVAILABLE -> {
-                    // Tile is unavailable (no profile or pending operation) - ignore click
-                    Log.d(TAG, "Tile UNAVAILABLE -> ignoring click")
-                }
-                else -> {
-                    // qsTile is null, try to toggle anyway
-                    Log.d(TAG, "Tile state null -> calling handleToggle()")
-                    GlobalState.handleToggle()
-                }
+        val tile = qsTile ?: return
+        if (GlobalState.runStateFlow.value == RunState.PENDING) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastClickTime < DEBOUNCE_MS) return
+        lastClickTime = now
+
+        when (tile.state) {
+            Tile.STATE_INACTIVE -> {
+                tile.state = Tile.STATE_ACTIVE
+                tile.updateTile()
+                // Don't force a screen unlock: unlockAndRun() prompts the lock screen.
+                // With VPN permission already granted + saved cold-start params the start
+                // is headless (startForegroundService, no activity), so the VPN toggles
+                // straight from the locked Quick Settings panel — like happ / v2raytun.
+                GlobalState.handleStart()
+            }
+            Tile.STATE_ACTIVE -> {
+                tile.state = Tile.STATE_INACTIVE
+                tile.updateTile()
+                GlobalState.handleStop()
             }
         }
     }
 
-    override fun onTileRemoved() {
-        Log.d(TAG, "onTileRemoved called")
-        super.onTileRemoved()
-    }
-
-    override fun onTileAdded() {
-        Log.d(TAG, "onTileAdded called")
-        super.onTileAdded()
-    }
-
     override fun onDestroy() {
-        Log.d(TAG, "onDestroy called")
+        mainHandler.removeCallbacks(syncRunnable)
         GlobalState.runState.removeObserver(observer)
         super.onDestroy()
+    }
+
+    private fun syncTile() {
+        val tile = qsTile ?: return
+        tile.state = when {
+            !GlobalState.hasActiveProfile() -> Tile.STATE_UNAVAILABLE
+            GlobalState.runStateFlow.value == RunState.START -> Tile.STATE_ACTIVE
+            else -> Tile.STATE_INACTIVE
+        }
+        tile.updateTile()
     }
 }

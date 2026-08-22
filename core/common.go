@@ -2,19 +2,18 @@ package main
 
 import (
 	b "bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/adapter/inbound"
 	"github.com/metacubex/mihomo/adapter/outboundgroup"
 	"github.com/metacubex/mihomo/adapter/provider"
-	"github.com/metacubex/mihomo/common/batch"
 	"github.com/metacubex/mihomo/component/dialer"
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/config"
@@ -27,16 +26,20 @@ import (
 	"github.com/metacubex/mihomo/log"
 	rp "github.com/metacubex/mihomo/rules/provider"
 	"github.com/metacubex/mihomo/tunnel"
+	"golang.org/x/sync/semaphore"
 )
 
 var (
-	currentConfig *config.Config
-	version       = 0
-	isRunning     = false
-	runLock       sync.Mutex
-	mBatch, _     = batch.New[bool](context.Background(), batch.WithConcurrencyNum[bool](50))
+	currentConfig     *config.Config
+	version           atomic.Int32
+	isRunning         = false
+	runLock           sync.Mutex
+	testDelaySem      = semaphore.NewWeighted(50)
+	proxyDescMu       sync.RWMutex
 	proxyDescriptions = map[string]string{}
-	pendingTunEnable  = false
+	pendingTunEnable      = false
+	currentTestURL        = "https://www.gstatic.com/generate_204"
+	minHealthCheckInterval = 5 * time.Second
 )
 
 type ExternalProviders []ExternalProvider
@@ -58,6 +61,34 @@ func proxiesWithProviders() map[string]constant.Proxy {
 		}
 	}
 	return allProxies
+}
+
+func computeMinHealthCheckInterval(rawConfig *config.RawConfig) {
+	min := 300
+	for _, g := range rawConfig.ProxyGroup {
+		var iv int
+		switch v := g["interval"].(type) {
+		case int:
+			iv = v
+		case float64:
+			iv = int(v)
+		case json.Number:
+			iv64, _ := v.Int64()
+			iv = int(iv64)
+		}
+		if iv > 0 && iv < min {
+			min = iv
+		}
+	}
+	d := time.Duration(min) * time.Second
+	// Floor at 30s (was 5s): a tiny/misconfigured group interval would otherwise url-test
+	// every proxy as often as every 5s while foreground — bursts of TLS handshakes
+	// (CPU + radio + data) for marginally fresher latency numbers.
+	if d < 30*time.Second {
+		d = 30 * time.Second
+	}
+	log.Infoln("[HealthCheck] computed min interval from %d groups: %s", len(rawConfig.ProxyGroup), d)
+	minHealthCheckInterval = d
 }
 
 // extractProxyDescriptionsFromRaw caches custom server descriptions by proxy name.
@@ -90,7 +121,9 @@ func extractProxyDescriptionsFromRaw(rawConfig *config.RawConfig) {
 		}
 		descriptions[name] = description
 	}
+	proxyDescMu.Lock()
 	proxyDescriptions = descriptions
+	proxyDescMu.Unlock()
 }
 
 // proxiesWithDescriptions injects serverDescription for each proxy in API response.
@@ -105,7 +138,10 @@ func proxiesWithDescriptions() map[string]interface{} {
 		if err := json.Unmarshal(data, &item); err != nil {
 			continue
 		}
-		if desc, ok := proxyDescriptions[name]; ok && desc != "" {
+		proxyDescMu.RLock()
+		desc, hasDesc := proxyDescriptions[name]
+		proxyDescMu.RUnlock()
+		if hasDesc && desc != "" {
 			item["serverDescription"] = desc
 		}
 		result[name] = item
@@ -273,6 +309,9 @@ func readFile(path string) ([]byte, error) {
 func updateConfig(params *UpdateParams) {
 	runLock.Lock()
 	defer runLock.Unlock()
+	if currentConfig == nil {
+		return
+	}
 	general := currentConfig.General
 	if params.MixedPort != nil {
 		general.MixedPort = *params.MixedPort
@@ -322,11 +361,21 @@ func updateConfig(params *UpdateParams) {
 	if params.Tun != nil {
 		general.Tun.Enable = params.Tun.Enable
 		pendingTunEnable = params.Tun.Enable
-		general.Tun.AutoRoute = *params.Tun.AutoRoute
-		general.Tun.Device = *params.Tun.Device
-		general.Tun.RouteAddress = *params.Tun.RouteAddress
-		general.Tun.DNSHijack = *params.Tun.DNSHijack
-		general.Tun.Stack = *params.Tun.Stack
+		if params.Tun.AutoRoute != nil {
+			general.Tun.AutoRoute = *params.Tun.AutoRoute
+		}
+		if params.Tun.Device != nil {
+			general.Tun.Device = *params.Tun.Device
+		}
+		if params.Tun.RouteAddress != nil {
+			general.Tun.RouteAddress = *params.Tun.RouteAddress
+		}
+		if params.Tun.DNSHijack != nil {
+			general.Tun.DNSHijack = *params.Tun.DNSHijack
+		}
+		if params.Tun.Stack != nil {
+			general.Tun.Stack = *params.Tun.Stack
+		}
 	}
 
 	updateListeners()
@@ -338,7 +387,11 @@ func setupConfig(params *SetupParams) error {
 	var err error
 
 	extractProxyDescriptionsFromRaw(params.Config)
+	computeMinHealthCheckInterval(params.Config)
 	resetHealthCheckForwarderState()
+	if params.TestURL != "" {
+		currentTestURL = params.TestURL
+	}
 
 	parseStart := time.Now()
 	currentConfig, err = config.ParseRawConfig(params.Config)
@@ -348,11 +401,13 @@ func setupConfig(params *SetupParams) error {
 	}
 	log.Infoln("[Setup] ParseRawConfig took %s", time.Since(parseStart))
 	pendingTunEnable = currentConfig.General.Tun.Enable
-	currentConfig.General.Tun.Enable = false
-	// Parse and cache config only. Full runtime apply happens on Start.
+	if runtime.GOOS == "android" || !isRunning {
+		currentConfig.General.Tun.Enable = false
+	}
 	applyStart := time.Now()
-	executor.ApplyConfig(currentConfig, false)
+	executor.ApplyConfig(currentConfig, true)
 	log.Infoln("[Setup] executor.ApplyConfig took %s", time.Since(applyStart))
+	go runtime.GC()
 	currentConfig.General.Tun.Enable = pendingTunEnable
 	// External-controller lifecycle is independent from TUN start/stop.
 	// Recreate API server during setup so it survives app restarts without

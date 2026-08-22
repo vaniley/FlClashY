@@ -11,6 +11,7 @@ import 'package:flclashx/plugins/app.dart';
 import 'package:flclashx/providers/providers.dart';
 import 'package:flclashx/state.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -27,7 +28,6 @@ class Application extends ConsumerStatefulWidget {
 }
 
 class ApplicationState extends ConsumerState<Application> {
-  Timer? _autoUpdateGroupTaskTimer;
   Timer? _autoUpdateProfilesTaskTimer;
 
   final _pageTransitionsTheme = const PageTransitionsTheme(
@@ -53,7 +53,15 @@ class ApplicationState extends ConsumerState<Application> {
       windows?.enableDarkModeForApp();
     }
 
-    _autoUpdateGroupTask();
+    if (Platform.isAndroid) {
+      // Pin the highest refresh rate (per session) so the Flutter engine samples
+      // 120 Hz at surface creation. A hand-rolled preferredDisplayModeId left LTPO
+      // Pixel panels showing 120 Hz while the engine rendered at 60 (visible jank);
+      // flutter_displaymode handles the OEM quirks. Best-effort, never fatal.
+      unawaited(FlutterDisplayMode.setHighRefreshRate().catchError((_) {}));
+    }
+
+    globalState.startGroupsUpdateTask();
     _autoUpdateProfilesTask();
     globalState.appController = AppController(context, ref);
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
@@ -67,18 +75,12 @@ class ApplicationState extends ConsumerState<Application> {
     });
   }
 
-  void _autoUpdateGroupTask() {
-    _autoUpdateGroupTaskTimer = Timer(const Duration(milliseconds: 20000), () {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        globalState.appController.updateGroupsDebounce();
-        _autoUpdateGroupTask();
-      });
-    });
-  }
-
   void _autoUpdateProfilesTask() {
     _autoUpdateProfilesTaskTimer = Timer(const Duration(minutes: 20), () async {
       await globalState.appController.autoUpdateProfiles();
+      // dispose() may have landed during the await; don't arm a fresh
+      // post-dispose timer that would keep firing.
+      if (!mounted) return;
       _autoUpdateProfilesTask();
     });
   }
@@ -209,13 +211,29 @@ class ApplicationState extends ConsumerState<Application> {
       );
 
   @override
-  Future<void> dispose() async {
+  void dispose() {
     linkManager.destroy();
-    _autoUpdateGroupTaskTimer?.cancel();
+    globalState.stopGroupsUpdateTask();
     _autoUpdateProfilesTaskTimer?.cancel();
+    if (Platform.isAndroid) {
+      // Activity teardown (recreation, "don't keep activities", OEM kill) must
+      // not shut the core down: the FGS/tunnel outlives the UI by design, and
+      // handleExit()/destroy() here killed the executor under a live VPN.
+      // savePreferences() is debounced/saved-on-pause, so fire-and-forget it to
+      // honor the synchronous State.dispose() contract.
+      unawaited(globalState.appController.savePreferences());
+      super.dispose();
+      return;
+    }
+    // Desktop teardown ends in system.exit(); run it detached so dispose() stays
+    // synchronous (no await before super.dispose()).
+    unawaited(_desktopTeardown());
+    super.dispose();
+  }
+
+  Future<void> _desktopTeardown() async {
     await clashCore.destroy();
     await globalState.appController.savePreferences();
     await globalState.appController.handleExit();
-    super.dispose();
   }
 }

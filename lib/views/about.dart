@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:flclashx/clash/core.dart';
 import 'package:flclashx/common/common.dart';
+import 'package:flclashx/enum/enum.dart';
 import 'package:flclashx/state.dart';
 import 'package:flclashx/widgets/widgets.dart';
 import 'package:flutter/material.dart';
@@ -46,6 +49,7 @@ class AboutView extends StatelessWidget {
             },
             trailing: const Icon(Icons.update),
           ),
+          if (system.isDesktop) const _CoreUpdateItem(),
           ListItem(
             title: Text(appLocalizations.project),
             onTap: () {
@@ -59,7 +63,7 @@ class AboutView extends StatelessWidget {
             title: Text(appLocalizations.originalRepository),
             onTap: () {
               globalState.openUrl(
-                "https://github.com/pluralplay/FlClashX",
+                "https://github.com/vaniley/FlClashY",
               );
             },
             trailing: const Icon(Icons.insert_link),
@@ -68,7 +72,7 @@ class AboutView extends StatelessWidget {
             title: Text(appLocalizations.core),
             onTap: () {
               globalState.openUrl(
-                "https://github.com/pluralplay/xHomo",
+                "https://github.com/MetaCubeX/mihomo",
               );
             },
             trailing: const Icon(Icons.insert_link),
@@ -289,16 +293,185 @@ class _CoreVersionWidget extends StatelessWidget {
   const _CoreVersionWidget();
 
   @override
+  Widget build(BuildContext context) => FutureBuilder<String>(
+        // Prefer the running instance — after a standalone core update it is
+        // the only truthful source; the build-time constant covers a stopped
+        // core.
+        future: clashCore.getCoreVersion(),
+        builder: (context, snapshot) {
+          final live = snapshot.data;
+          final coreVersion =
+              live != null && live.isNotEmpty ? live : globalState.coreVersion;
+          if (coreVersion == null || coreVersion.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return Text(
+            'Core: $coreVersion',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          );
+        },
+      );
+}
+
+class _CoreUpdateItem extends StatefulWidget {
+  const _CoreUpdateItem();
+
+  @override
+  State<_CoreUpdateItem> createState() => _CoreUpdateItemState();
+}
+
+class _CoreUpdateItemState extends State<_CoreUpdateItem> {
+  Map<String, dynamic>? _release;
+  bool _busy = false;
+  bool _downloading = false;
+  double _progress = 0;
+  String _error = '';
+  bool _initialCheckDone = false;
+
+  String get _coreAssetName {
+    final arch = Platform.version.contains('arm64') ||
+            Platform.version.contains('aarch64')
+        ? 'arm64'
+        : 'amd64';
+    final platform = Platform.isWindows
+        ? 'windows'
+        : Platform.isMacOS
+            ? 'macos'
+            : 'linux';
+    final ext = Platform.isWindows ? '.exe' : '';
+    return 'FlClashCore-$platform-$arch$ext';
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialCheckDone) {
+      _initialCheckDone = true;
+      _check();
+    }
+  }
+
+  Future<void> _check() async {
+    try {
+      final coreVersion = await clashCore.getCoreVersion();
+      final currentVersion =
+          coreVersion.isNotEmpty ? coreVersion : globalState.coreVersion ?? '';
+      if (currentVersion.isEmpty) {
+        return;
+      }
+      final release = await request.checkForCoreUpdate(currentVersion);
+      if (mounted && release != null) {
+        setState(() => _release = release);
+      }
+    } catch (_) {
+      // The item only appears when an update is found; stay hidden on errors.
+    }
+  }
+
+  Future<void> _download() async {
+    if (_busy || _release == null) {
+      return;
+    }
+    final assets = _release!['assets'] as List<dynamic>? ?? [];
+    final name = _coreAssetName;
+    final asset = assets
+        .cast<Map<String, dynamic>>()
+        .where((a) => (a['name'] as String?) == name)
+        .firstOrNull;
+    if (asset == null) {
+      setState(() => _error = '$name not found');
+      return;
+    }
+    final url = asset['browser_download_url'] as String;
+    setState(() {
+      _busy = true;
+      _downloading = true;
+      _progress = 0;
+      _error = '';
+    });
+    final error = await request.downloadCoreUpdate(
+      url,
+      appPath.corePendingPath,
+      onProgress: (received, total) {
+        if (!mounted || total <= 0) return;
+        setState(() => _progress = received / total);
+      },
+    );
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _downloading = false;
+      if (error != null) {
+        _error = error;
+      }
+    });
+    if (error == null) {
+      _showRestartDialog();
+    }
+  }
+
+  void _showRestartDialog() {
+    globalState.showCommonDialog(
+      dismissible: false,
+      child: CommonDialog(
+        title: appLocalizations.coreUpdateSuccess,
+        actions: [
+          TextButton(
+            onPressed: () {
+              // Restart only the core, not the whole app. reStart applies the
+              // pending binary (helper swap on Windows) and re-inits in place, so
+              // the Dart run-state stays in sync — a full app restart
+              // (handleRestart) left the UI thinking the core was stopped while it
+              // was actually up and proxying.
+              // Close the dialog + the About sheet and jump to the dashboard so the
+              // restart happens on the main screen, not buried in settings.
+              globalState.navigatorKey.currentState
+                  ?.popUntil((route) => route.isFirst);
+              globalState.appController.toPage(PageLabel.dashboard);
+              globalState.appController.restartCore();
+            },
+            child: Text(appLocalizations.restart),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final coreVersion = globalState.coreVersion;
-    if (coreVersion == null || coreVersion.isEmpty) {
+    final release = _release;
+    if (release == null) {
       return const SizedBox.shrink();
     }
-    return Text(
-      'Core: $coreVersion',
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+    final color = Theme.of(context).colorScheme.primary;
+    final tag = (release['tag_name'] as String).replaceFirst('core-', '');
+    final subtitle = _error.isNotEmpty
+        ? '${appLocalizations.coreUpdateFailed}: $_error'
+        : _downloading
+            ? appLocalizations.coreUpdateDownloading
+            : tag;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListItem(
+          title: Text(
+            appLocalizations.coreUpdateAvailable,
+            style: TextStyle(color: color, fontWeight: FontWeight.bold),
           ),
+          subtitle: Text(subtitle),
+          onTap: _download,
+          trailing: Icon(Icons.system_update, color: color),
+        ),
+        if (_downloading)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: LinearProgressIndicator(
+              value: _progress > 0 ? _progress : null,
+            ),
+          ),
+      ],
     );
   }
 }
