@@ -23,12 +23,6 @@ jobs:
           - platform: linux
             os: ubuntu-24.04
             arch: amd64
-          - platform: macos
-            os: macos-latest
-            arch: amd64
-          - platform: macos
-            os: macos-latest
-            arch: arm64
           - platform: windows
             os: windows-11-arm
             arch: arm64
@@ -50,67 +44,44 @@ jobs:
         run: rustup target add aarch64-pc-windows-msvc
 
       - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup macOS Signing Certificate
-        if: matrix.platform == 'macos'
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          KEYCHAIN_PASSWORD=$(uuidgen)
-
-          echo "🔐 Creating temporary keychain..."
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          echo "📥 Importing certificate..."
-          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
-          security import certificate.p12 \
-            -P "$APPLE_CERTIFICATE_PASSWORD" \
-            -A \
-            -t cert \
-            -f pkcs12 \
-            -k "$KEYCHAIN_PATH"
-
-
-          security list-keychain -d user -s "$KEYCHAIN_PATH"
-
-          security default-keychain -s "$KEYCHAIN_PATH"
-
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          echo "✅ Verifying identity..."
-          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
-
-          rm certificate.p12
-
-          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
-          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
+        uses: actions/checkout@v7
 
       - name: Setup Android Signing
-        if: startsWith(matrix.platform,'android')
+        if: matrix.platform == 'android'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.KEYSTORE }}
+          ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "${{ secrets.KEYSTORE }}" | base64 --decode > android/app/keystore.jks
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/local.properties
-          echo "storePassword=${{ secrets.STORE_PASSWORD }}" >> android/local.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/local.properties
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEY_ALIAS" ] || \
+             [ -z "$ANDROID_STORE_PASSWORD" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "::warning::Android signing secrets are incomplete; using the debug signing key."
+            exit 0
+          fi
+
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/keystore.jks
+          keytool -list \
+            -keystore android/app/keystore.jks \
+            -storepass "$ANDROID_STORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" >/dev/null
+          {
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "storePassword=$ANDROID_STORE_PASSWORD"
+            echo "keyPassword=$ANDROID_KEY_PASSWORD"
+          } >> android/local.properties
 
       - name: Setup Firebase Config
-        if: startsWith(matrix.platform,'android')
+        if: matrix.platform == 'android'
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
-            echo "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
+            printf '%s' "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
           fi
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: "1.26.0"
           cache-dependency-path: |
@@ -135,19 +106,6 @@ jobs:
       - name: Get Flutter Dependency
         run: flutter pub get
 
-      - name: Setup Xcode Signing Configuration
-        if: matrix.platform == 'macos'
-        env:
-          APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          cat > macos/Runner/Configs/Local.xcconfig << EOF
-          CODE_SIGN_IDENTITY = $APPLE_DEVELOPER_ID
-          DEVELOPMENT_TEAM = $APPLE_TEAM_ID
-          EOF
-
-          echo "✅ Created Local.xcconfig for signing"
-
       - name: Setup Inno Setup
         if: matrix.platform == 'windows'
         run: |
@@ -158,55 +116,20 @@ jobs:
         run: dart setup.dart ${{ matrix.platform }} ${{ matrix.arch && format('--arch {0}', matrix.arch) }} ${{ env.IS_STABLE == 'true' && '--env stable' || '' }}
 
       - name: Upload
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: artifact-${{ matrix.platform }}${{ matrix.arch && format('-{0}', matrix.arch) }}
           path: ./dist
           overwrite: true
 
-      - name: Cleanup macOS Keychain
-        if: always() && matrix.platform == 'macos'
-        run: |
-          if [ -n "$KEYCHAIN_PATH" ] && [ -f "$KEYCHAIN_PATH" ]; then
-            echo "🧹 Cleaning up keychain..."
-            security delete-keychain "$KEYCHAIN_PATH" || true
-          fi
-
-
-          if [ -f macos/Runner/Configs/Local.xcconfig ]; then
-            echo "🧹 Cleaning up Local.xcconfig..."
-            rm macos/Runner/Configs/Local.xcconfig || true
-          fi
-
-  sign-macos:
-    needs: [build]
-    if: startsWith(github.ref, 'refs/tags/v')
-    strategy:
-      matrix:
-        include:
-          - platform: macos
-            arch: arm64
-          - platform: macos
-            arch: amd64
-    uses: ./.github/workflows/macos-sign-notarize.yaml
-    with:
-      artifact-name: artifact-${{ matrix.platform }}-${{ matrix.arch }}
-      arch: ${{ matrix.arch }}
-    secrets:
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
-      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-
   changelog:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     needs: [build]
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         if: ${{ env.IS_STABLE == 'true' }}
         with:
           fetch-depth: 0
@@ -265,29 +188,22 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   upload:
-    permissions: write-all
-    needs: [build, sign-macos]
-    if: always() && (needs.build.result == 'success')
+    permissions:
+      contents: write
+    needs: [build]
+    if: needs.build.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Download
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           path: ./dist/
           pattern: artifact-*
-          merge-multiple: true
-
-      - name: Download signed macOS artifacts
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/download-artifact@v6
-        with:
-          path: ./dist/
-          pattern: artifact-macos-*-signed
           merge-multiple: true
 
       - name: Generate release.md
@@ -297,7 +213,7 @@ jobs:
           # Determine previous tag based on release type
           if [ "${{ env.IS_STABLE }}" == "true" ]; then
             # For stable: get latest stable release from API
-            preTag=$(curl --silent "https://api.github.com/repos/pluralplay/FlClashX/releases/latest" | grep -Po '"tag_name": "\K.*?(?=")' || echo "")
+            preTag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>/dev/null || echo "")
           else
             # For pre-release: get the latest pre-release tag (last tag with '-' in name before current)
             preTag=""
@@ -309,7 +225,7 @@ jobs:
             done
             # If no previous pre-release found, use latest stable
             if [ -z "$preTag" ]; then
-              preTag=$(curl --silent "https://api.github.com/repos/pluralplay/FlClashX/releases/latest" | grep -Po '"tag_name": "\K.*?(?=")' || echo "")
+              preTag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>/dev/null || echo "")
             fi
           fi
           
@@ -355,7 +271,7 @@ jobs:
 
       - name: Release (Stable)
         if: ${{ env.IS_STABLE == 'true' }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ./dist/*
           body_path: "./release.md"
@@ -363,160 +279,8 @@ jobs:
 
       - name: Release (Pre-release)
         if: ${{ env.IS_STABLE != 'true' }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ./dist/*
           body_path: "./release.md"
           prerelease: true
-
-      - name: Upload release notes for notification
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-notes
-          path: release.md
-          retention-days: 1
-
-  aur-publish:
-    needs: [upload]
-    if: always() && needs.upload.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup SSH for AUR
-        env:
-          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
-          chmod 600 ~/.ssh/aur
-          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
-          cat >> ~/.ssh/config << 'SSHEOF'
-          Host aur.archlinux.org
-            IdentityFile ~/.ssh/aur
-            User aur
-          SSHEOF
-
-      - name: Parse release tag
-        id: release
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          if [[ "$VERSION" =~ ^([0-9.]+)-pre\.([0-9]+)$ ]]; then
-            echo "pkgver=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
-            echo "pkgrel=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
-            echo "aur_pkg=flclashx-git" >> "$GITHUB_OUTPUT"
-          else
-            echo "pkgver=$VERSION" >> "$GITHUB_OUTPUT"
-            echo "pkgrel=1" >> "$GITHUB_OUTPUT"
-            echo "aur_pkg=flclashx-bin" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Clone AUR repository
-        run: git clone ssh://aur@aur.archlinux.org/${{ steps.release.outputs.aur_pkg }}.git /tmp/aur-pkg
-
-      - name: Download release assets and compute checksums
-        id: checksums
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p /tmp/aur-assets
-
-          gh release download "$GITHUB_REF_NAME" \
-            -p "FlClashX-linux-amd64.deb" \
-            -D /tmp/aur-assets \
-            -R "$GITHUB_REPOSITORY"
-          echo "sha_x86=$(sha256sum /tmp/aur-assets/FlClashX-linux-amd64.deb | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
-          if gh release download "$GITHUB_REF_NAME" \
-            -p "FlClashX-linux-arm64.deb" \
-            -D /tmp/aur-assets \
-            -R "$GITHUB_REPOSITORY" 2>/dev/null; then
-            echo "sha_arm=$(sha256sum /tmp/aur-assets/FlClashX-linux-arm64.deb | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-            echo "has_arm=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_arm=false" >> "$GITHUB_OUTPUT"
-          fi
-
-          rm -rf /tmp/aur-assets
-
-      - name: Update PKGBUILD
-        working-directory: /tmp/aur-pkg
-        env:
-          PKGVER: ${{ steps.release.outputs.pkgver }}
-          PKGREL: ${{ steps.release.outputs.pkgrel }}
-          SHA_X86: ${{ steps.checksums.outputs.sha_x86 }}
-          SHA_ARM: ${{ steps.checksums.outputs.sha_arm }}
-          HAS_ARM: ${{ steps.checksums.outputs.has_arm }}
-        run: |
-          sed -i "s/^pkgver=.*/pkgver=${PKGVER}/" PKGBUILD
-          sed -i "s/^pkgrel=.*/pkgrel=${PKGREL}/" PKGBUILD
-          sed -i "s/^sha256sums_x86_64=.*/sha256sums_x86_64=('${SHA_X86}')/" PKGBUILD
-
-          if [ "$HAS_ARM" == "true" ]; then
-            sed -i "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('${SHA_ARM}')/" PKGBUILD
-          else
-            sed -i "/^[[:space:]]*'aarch64'/d" PKGBUILD
-            sed -i "/^source_aarch64=/d" PKGBUILD
-            sed -i "/^sha256sums_aarch64=/d" PKGBUILD
-          fi
-
-      - name: Generate .SRCINFO
-        working-directory: /tmp/aur-pkg
-        run: |
-          docker run --rm -v "$(pwd):/pkg" archlinux:base-devel bash -c \
-            "useradd -m -u $(id -u) builder && chown -R builder:builder /pkg && su builder -c 'cd /pkg && makepkg --printsrcinfo > .SRCINFO'"
-
-      - name: Push to AUR
-        working-directory: /tmp/aur-pkg
-        run: |
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "Github Actions (pluralplay)"
-          git add PKGBUILD .SRCINFO
-          if ! git diff --cached --quiet; then
-            git commit -m "Update to $GITHUB_REF_NAME"
-            git push
-          fi
-
-  notify:
-    needs: [upload, aur-publish]
-    # Runs after AUR publish; posts as long as the GitHub release succeeded,
-    # regardless of the AUR result.
-    if: always() && needs.upload.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Download release notes
-        uses: actions/download-artifact@v6
-        with:
-          name: release-notes
-
-      - name: Prepare commit list for notification
-        id: prepare_commits
-        run: |
-          main_commit=$(git log -1 --pretty=format:"%s" ${{ github.ref_name }})
-          other_commits=$(head -n 20 release.md | grep "^- " | grep -v "^- ${main_commit}$" | head -n 9)
-          commits="• ${main_commit}"
-          if [ -n "$other_commits" ]; then
-            commits="${commits}"$'\n'"${other_commits}"
-          fi
-          commits_escaped=$(echo "$commits" | jq -Rs .)
-          echo "commits=$commits_escaped" >> $GITHUB_OUTPUT
-
-      - name: Send Telegram notifications
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHANNEL_ID_1: ${{ secrets.TELEGRAM_CHANNEL_ID_1 }}
-          TELEGRAM_CHANNEL_ID_2: ${{ secrets.TELEGRAM_CHANNEL_ID_2 }}
-          TELEGRAM_CHANNEL_ID_3: ${{ secrets.TELEGRAM_CHANNEL_ID_3 }}
-          VERSION: ${{ github.ref_name }}
-          COMMITS: ${{ fromJSON(steps.prepare_commits.outputs.commits) }}
-          RELEASE_URL: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}
-          IS_STABLE: ${{ env.IS_STABLE }}
-        run: |
-          python3 -m pip install requests --quiet
-          python3 .github/scripts/notify_telegram.py

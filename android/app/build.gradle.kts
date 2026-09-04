@@ -25,9 +25,9 @@ val mStorePassword: String? = localProperties.getProperty("storePassword")
 val mKeyAlias: String? = localProperties.getProperty("keyAlias")
 val mKeyPassword: String? = localProperties.getProperty("keyPassword")
 val isRelease = mStoreFile.exists()
-        && mStorePassword != null
-        && mKeyAlias != null
-        && mKeyPassword != null
+        && !mStorePassword.isNullOrBlank()
+        && !mKeyAlias.isNullOrBlank()
+        && !mKeyPassword.isNullOrBlank()
 
 android {
     namespace = "com.follow.clashx"

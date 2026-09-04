@@ -1,7 +1,7 @@
 name: flclashx
 description: FlClashY multi-platform proxy client based on FlClash and Mihomo.
 publish_to: "none"
-version: 0.4.2+2026071801
+version: 0.4.3+2026082301
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
