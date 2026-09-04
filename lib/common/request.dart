@@ -11,8 +11,8 @@ import 'package:flclashx/state.dart';
 import 'package:flutter/cupertino.dart';
 
 class Request {
-
-  Request() {
+  Request({String Function()? userAgentProvider})
+      : _userAgentProvider = userAgentProvider ?? (() => globalState.ua) {
     _dio = Dio(
       BaseOptions(
         headers: {
@@ -45,48 +45,47 @@ class Request {
   }
   late final Dio _dio;
   late final Dio _clashDio;
-  String? userAgent;
+  final String Function() _userAgentProvider;
 
   Future<Response<Uint8List>> getFileResponseForUrl(
     String rawUrl, {
     Map<String, dynamic>? headers,
   }) async {
-    final url = rawUrl.normalizeUrlCredentials;
-    final requestHeaders = headers ?? {};
-    requestHeaders['User-Agent'] ??= globalState.ua;
+    var uri = Uri.parse(rawUrl.normalizeUrlCredentials);
+    final requestHeaders = Map<String, dynamic>.from(headers ?? const {});
+    // Subscription providers commonly use this UA to select a Clash-compatible
+    // response. DeviceInfoService's browser-like UA caused some providers to
+    // return an HTML landing page instead of the subscription body.
+    requestHeaders['User-Agent'] = _userAgentProvider();
 
-    final dio = _dio;
-
-    final firstResponse = await dio.get<Uint8List>(
-      url,
-      options: Options(
-        responseType: ResponseType.bytes,
-        headers: requestHeaders,
-        followRedirects: false,
-        validateStatus: (status) => status != null && status < 400,
-      ),
-    );
-
-    if (firstResponse.isRedirect == true) {
-      final newUrl = firstResponse.headers.value('location');
-      if (newUrl == null) {
-        throw Exception('Redirect detected, but no location header was found.');
-      }
-
-      print('↪️ Redirecting to: $newUrl');
-      final finalResponse = await dio.get<Uint8List>(
-        newUrl,
+    const maxRedirects = 5;
+    for (var redirects = 0; redirects <= maxRedirects; redirects++) {
+      final response = await _dio.getUri<Uint8List>(
+        uri,
         options: Options(
           responseType: ResponseType.bytes,
           headers: requestHeaders,
-          followRedirects: true,
-          maxRedirects: 5,
-          validateStatus: (status) => status != null && status < 500,
+          followRedirects: false,
+          validateStatus: (status) =>
+              status != null && status >= 200 && status < 400,
         ),
       );
-      return finalResponse;
+
+      final status = response.statusCode ?? 0;
+      if (status < 300) return response;
+
+      if (redirects == maxRedirects) {
+        throw Exception('Too many redirects while loading the subscription.');
+      }
+      final location = response.headers.value(HttpHeaders.locationHeader);
+      if (location == null || location.trim().isEmpty) {
+        throw Exception('Redirect response has no location header.');
+      }
+      // Uri.resolve supports both absolute and relative Location headers.
+      uri = uri.resolve(location.trim());
     }
-    return firstResponse;
+
+    throw StateError('Unreachable redirect state.');
   }
 
   Future<Response> getTextResponseForUrl(String url) async {
@@ -129,7 +128,8 @@ class Request {
     return data;
   }
 
-  Future<Map<String, dynamic>?> checkForCoreUpdate(String currentCoreVersion) async {
+  Future<Map<String, dynamic>?> checkForCoreUpdate(
+      String currentCoreVersion) async {
     final response = await _dio.get(
       "https://api.github.com/repos/$repository/releases",
       options: Options(responseType: ResponseType.json),
@@ -141,7 +141,8 @@ class Request {
     for (final release in releases) {
       final tag = release['tag_name'] as String? ?? '';
       if (!tag.startsWith('core-')) continue;
-      final remote = tag.replaceFirst('core-', '').replaceAll(RegExp(r'^v'), '');
+      final remote =
+          tag.replaceFirst('core-', '').replaceAll(RegExp(r'^v'), '');
       // Strictly newer only: a locally built core can be ahead of the newest
       // core-* release, and offering it back would be a silent downgrade.
       if (utils.compareVersions(remote, current) <= 0) return null;
@@ -281,7 +282,8 @@ class Request {
   /// per-machine installs (Program Files) where the unelevated app can't
   /// overwrite the binary itself. The helper stops the core, moves the file and
   /// refreshes the allow-list hash. Returns true only if it reports success.
-  Future<bool> replaceCoreByHelper(String pendingPath, String targetPath) async {
+  Future<bool> replaceCoreByHelper(
+      String pendingPath, String targetPath) async {
     try {
       final response = await _dio
           .post(
@@ -327,12 +329,14 @@ class Request {
     try {
       final addr = globalState.effectiveExternalController.value;
       if (addr.isEmpty) return null;
-      final response = await _dio.get<Map<String, dynamic>>(
-        "http://$addr/version",
-        options: Options(
-          responseType: ResponseType.json,
-        ),
-      ).timeout(const Duration(seconds: 2));
+      final response = await _dio
+          .get<Map<String, dynamic>>(
+            "http://$addr/version",
+            options: Options(
+              responseType: ResponseType.json,
+            ),
+          )
+          .timeout(const Duration(seconds: 2));
 
       if (response.statusCode != HttpStatus.ok) return null;
       return response.data;

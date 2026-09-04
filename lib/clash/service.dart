@@ -8,7 +8,6 @@ import 'package:flclashx/models/core.dart';
 import 'package:flclashx/state.dart';
 
 class ClashService extends ClashHandlerInterface {
-
   factory ClashService() {
     _instance ??= ClashService._internal();
     return _instance!;
@@ -16,7 +15,7 @@ class ClashService extends ClashHandlerInterface {
 
   ClashService._internal() {
     unawaited(_initServer());
-    reStart();
+    unawaited(reStart());
   }
   static ClashService? _instance;
 
@@ -164,6 +163,11 @@ class ClashService extends ClashHandlerInterface {
         }
       });
       _watchProcess(started);
+    } catch (error, stackTrace) {
+      // A missing/corrupt core used to escape from this startup Future as an
+      // unhandled exception. Keep the UI alive and expose a useful diagnostic.
+      commonPrint.log('core startup failed: $error\n$stackTrace');
+      globalState.showNotifier('Core startup failed: $error');
     } finally {
       isStarting = false;
     }

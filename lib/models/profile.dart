@@ -72,12 +72,13 @@ class Profile with _$Profile {
   factory Profile.normal({
     String? label,
     String url = '',
-  }) => Profile(
-      label: label,
-      url: url,
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      autoUpdateDuration: defaultUpdateDuration,
-    );
+  }) =>
+      Profile(
+        label: label,
+        url: url,
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        autoUpdateDuration: defaultUpdateDuration,
+      );
 }
 
 @freezed
@@ -179,7 +180,6 @@ extension ProfileExtension on Profile {
       if (details.os != null) headers['x-device-os'] = details.os;
       if (details.osVersion != null) headers['x-ver-os'] = details.osVersion;
       if (details.model != null) headers['x-device-model'] = details.model;
-      if (details.userAgent != null) headers['User-Agent'] = details.userAgent;
     }
 
     final response = await request.getFileResponseForUrl(
@@ -189,35 +189,35 @@ extension ProfileExtension on Profile {
 
     final disposition = response.headers.value("content-disposition");
     final userinfo = response.headers.value('subscription-userinfo');
-    
+
     final responseData = response.data;
     if (responseData == null) {
       throw Exception("Failed to get profile data from response.");
     }
 
     final providerHeaders = <String, String>{};
-    
+
     final headersToCollect = [
       'announce',
-      'support-url', 
+      'support-url',
       'profile-update-interval',
       'x-hwid-max-devices-reached',
       'x-hwid-not-supported',
     ];
-    
+
     for (final headerName in headersToCollect) {
       final value = response.headers.value(headerName);
       if (value != null && value.isNotEmpty) {
         providerHeaders[headerName] = value;
       }
     }
-    
+
     response.headers.forEach((name, values) {
       if (name.toLowerCase().startsWith('flclashx-') && values.isNotEmpty) {
         providerHeaders[name.toLowerCase()] = values.first;
       }
     });
-    
+
     Duration? durationFromHeader;
     final updateIntervalHeader = providerHeaders['profile-update-interval'];
     if (updateIntervalHeader != null) {
