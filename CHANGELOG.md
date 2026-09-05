@@ -1,3 +1,234 @@
+## v0.4.4
+
+- fix: stabilize subscriptions and release startup
+
+- Restore the Clash-compatible subscription user agent, handle relative redirects safely, and reject HTTP error pages.
+
+- Make Linux packages start reliably, guard core startup failures, add release quality checks, and bump the stable version to 0.4.4.
+
+## v0.4.3-pre.1
+
+- ci: simplify release builds
+
+## v0.4.3
+
+- Merge FlClashX 0.4.2 updates
+
+- docs: add obtanium badge and button
+
+- docs: add obtanium badge and button
+- add weekly clean actions workflow
+
+- manual publish workflow, telegram after aur, html message
+
+- Update changelog
+
+- release 0.4.2
+
+- bump 0.4.2
+
+- fix macos zashboard webview lingering after close
+
+- macos config editor close without prompt when unchanged
+
+- fix macos editor window engine leak on close
+
+- macos config editor auto-update prompt
+
+- macos config editor in native window
+
+- macos zashboard in native webview window
+
+- fix server card and hero location display
+
+- fix file_picker oom, remove file upload buttons, local zashboard, fix fgs startForeground crash
+
+- fix macos zashboard, tv proxy dpad nav, zashboard auto controller, linux journal icons
+
+- Update changelog
+
+- Merge branch 'dev'
+
+- in-app zashboard webview (variable), proxy folded-group ping and tv focus, accesscontrol app list, global override order, group name in server card, app and core version in UA, bump 0.4.1
+
+- add AUR publish workflow
+
+- thanks @prettyleaf
+
+- add firebase crashlytics
+
+- docs: expand README with project overview, features and usage
+
+- Rewrite both README.md and README_EN.md with a structured layout covering
+- project description, features, download table, quick start, portable device
+- fingerprint guide, acknowledgements, and license section.
+
+- docs: add obtanium badge and button
+
+- drop server from notification, wildcard rule types, mihomo core link
+
+- Merge branch 'dev'
+
+- # Conflicts:
+- #	.github/workflows/build-core.yaml
+- #	core/constant.go
+
+- release 0.4.0
+
+- add 0.4.0 changelog
+
+- update core 1.19.28, windows helper core hot-swap, hero mode chip, ui cleanups
+
+- readme update
+
+- android stability and battery rework, screen-gated health checks, desktop core update and crash recovery, upstream utls, re_editor config editor
+
+- Fix RPM package link in release template
+- Fix RPM package link in pre-release template
+- feat: redesign connections page — tabs, app/exe icons, destination flags, zashboard button
+
+- refactor: compute hwid in memory, drop shared_preferences persistence
+
+- feat: classic navbar with old dashboard, hero navbar with new
+
+- fix: newboard header via flclashx-custom (update=every apply, add=on first add), unlock toggle
+
+- fix: android battery drain, instant host pings, launch flow and tun lifecycle, macos dns
+
+- feat: show core version in build-core run name
+
+- fix: remove duplicate branch input from build-core, use workflow_dispatch ref
+
+- fix: ip-check sequential with timeouts, fix announce emoji on new dashboard, android tun re-setup on connect, feat: vendor utls firefox148/safari26, bump mihomo core 1.19.27, feat: tv phone-sync, flclashx-override global, buy buttons
+
+- fix emoji bar on location badge, fix iconpack in navbar, fix android stability, bump Mihomo Core 1.19.26
+
+- edit readme
+
+- refactor new-dashboard, fix android issues, core bump 1.19.25
+
+- vpntun stability, android stability, bug fixes
+
+- android fixes and enhanced
+
+- fix stop broadcast delay
+
+- android fixes
+
+- android stability, fix notify android
+
+- fix: subtle primary tint on hero card when active
+
+- new board fix, android stability
+
+- fix: unify support icon to contact_support everywhere
+
+- fix: remove scroll, use AnimatedContainer for card bg transition
+
+- hero: animate card background color sync with ring fill
+
+- fix: increase bottom padding to 32px
+
+- fix: add bottom safe area padding for Android navigation bar
+
+- cleanup: remove unused imports from dashboard
+
+- merge: NEW DASHBOARD VIEW
+
+- NEW DASHBOARD VIEW ;)
+
+- ci notify fix
+
+- Android stability, tray fixes
+
+- delete unused code, and more fixes
+
+- fixes and more stability Android app
+
+- fix: VPN cold-start NPE, editor line numbers, build-core version update
+
+- - Sanitize Gson-deserialized VpnOptions to prevent null lists causing
+-   iterator NPE on Always-on/tile cold start
+- - Add line number gutter to config editor with soft-wrap awareness
+- - Update build-core workflow to pull mihomo dependency matching input version
+
+- fix: health check loading indicator and generated enum map
+
+- Add loading state (value: 0) before URLTest so UI shows spinners.
+- Include testUrl in delay messages so results land in the correct delayMap bucket.
+- Add missing healthCheck entry to generated ActionMethod enum map.
+
+- feat: domain-redirect via flclashx-newdomain header
+
+- On subscription update, if the response contains a flclashx-newdomain header with a different domain, the profile URL is updated to use the new host. Preserves path, query params, and scheme.
+
+- feat: core-side health check, delay test error handling, UI tooltips
+
+- Move proxy group health check from client-side batch pinging to core URLTest for accuracy and efficiency. Add error handling in delayTest to report -1 on failure. Add tooltips to action buttons across dashboard, profiles, and proxies views. Add l10n strings for testAllDelay, goToSelected, expandAll, collapseAll.
+
+- fix: process name detection, geo download timeout, windows arm64 build
+
+- fix: windows arm64 build path
+
+- fix: inno setup template, file naming, linux deb/rpm/appimage, kotlin version
+
+- fix: desktop socket race condition, battery prompt once, build improvements
+
+- - Fix socket race condition on macOS/desktop: _flushPendingCompleters was killing pending requests on first core connection, causing "core stopped" state
+- - Move battery optimization request from every VPN start to one-time on first app launch
+- - Fix setup.dart UTF-8 decode errors from Inno Setup output
+- - Add Inno Setup installation step to CI workflow
+
+- feat: android notification/tile/battery rework, shortcuts, desktop socket leak fix, macOS entitlement
+
+- ci: force Node 24 for all actions
+
+- feat: hwid headers update, merge provider headers on update, yaml highlight
+
+- feat: yaml highlight controller, editor rewrite, runtime config highlight
+
+- fix: editor content scroll with expands + maxLines
+
+- fix: editor wrap, scroll, dark theme support
+
+- ci: re-enable ARM builds
+
+- refactor: replace re_editor with flutter_code_editor
+
+- ci: disable ARM builds - re_editor incompatible with flutter master
+
+- ci: re-enable ARM builds with flutter master channel
+
+- fix: remove version from restart core button
+
+- fix: add getCoreVersion to ActionMethodEnumMap (was missing in generated code)
+
+- ci: upgrade artifact actions to v6 for Node 24
+
+- fix: core update version display, workflow input simplification
+
+- ci: upgrade actions to Node 24 compatible versions
+
+- feat: getCoreVersion IPC action, update UI fixes, revert ARM builds
+
+- fix: check core version from running instance, not build constant
+
+- fix: remove unused shutdown_service function
+
+- feat: core update progress bar and update highlight
+
+- fix: stop core before replacing binary on update
+
+- fix: flutter setup for windows arm and linux arm runners
+
+- fix: install flutter from git on ARM runners
+
+- fix: pin flutter version for ARM runners
+
+- aidl refactor, desktop feature and more
+
+- fix: recreate tun-interface
+
 ## v0.4.2
 
 - release 0.4.2
