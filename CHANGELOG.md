@@ -1,3 +1,13 @@
+## v0.4.5
+
+- Android: serialize native binding attempts, retain the crash retry budget, and apply the initial profile before the home screen is mounted.
+- Android: render the app while binding the core service; report initialization failures and allow retry from Connect.
+- Android: reject missing or incompatible native cores during the build instead of producing an APK with a broken JNI bridge.
+- Preserve the app on geodata extraction errors and publish extracted databases atomically.
+- Report failed native configuration validation/apply calls instead of treating an unavailable core as success.
+- Port FlClashX dev fixes: guard foreground notification creation (`c61d21f`), correct desktop core build tags (`79b71b5`), and restart macOS after a core update (`cf8304f`).
+- Update Mihomo to 1.19.29 with the dependency versions from FlClashX (`f5af13e`).
+
 ## v0.4.2
 
 - release 0.4.2

@@ -33,6 +33,9 @@ jobs:
       - name: Analyze Dart
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
+      - name: Test Android core packaging
+        run: python3 -m unittest discover -s test/native -v
+
       - name: Test Dart
         run: flutter test
 

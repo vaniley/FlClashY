@@ -45,21 +45,23 @@ class ClashCore {
       geoSiteFileName,
       asnFileName,
     ];
-    try {
-      for (final geoFileName in geoFileNameList) {
-        final geoFile = File(
-          join(homePath, geoFileName),
-        );
-        final isExists = await geoFile.exists();
-        if (isExists) {
-          continue;
-        }
+    for (final geoFileName in geoFileNameList) {
+      final geoFile = File(join(homePath, geoFileName));
+      if (await geoFile.exists() && await geoFile.length() > 0) continue;
+      // Publish only complete files: interruption during extraction must not
+      // leave a truncated database that is trusted on the next launch.
+      final temporary = File('${geoFile.path}.tmp');
+      try {
         final data = await rootBundle.load('assets/data/$geoFileName');
-        final List<int> bytes = data.buffer.asUint8List();
-        await geoFile.writeAsBytes(bytes, flush: true);
+        await temporary.writeAsBytes(
+          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+          flush: true,
+        );
+        await temporary.rename(geoFile.path);
+      } catch (e) {
+        if (await temporary.exists()) await temporary.delete();
+        throw StateError('Unable to prepare $geoFileName: $e');
       }
-    } catch (e) {
-      exit(0);
     }
   }
 

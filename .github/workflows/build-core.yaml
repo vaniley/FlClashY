@@ -69,7 +69,7 @@ jobs:
           cd core
           go build \
             -ldflags="-w -s -X github.com/metacubex/mihomo/constant.Version=${{ github.event.inputs.version }}" \
-            -tags="with_gvisor,cmfa" \
+            -tags="with_gvisor" \
             -o "../FlClashCore-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
 
       - name: Upload artifact

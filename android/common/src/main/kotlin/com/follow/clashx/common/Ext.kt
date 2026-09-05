@@ -76,8 +76,13 @@ fun Service.buildServiceNotification(
 }
 
 fun Service.promoteToForeground(iconRes: Int, title: String = "FlClashY"): Boolean {
-    ensureNotificationChannel()
-    val notification = buildServiceNotification(iconRes, title)
+    val notification = runCatching {
+        ensureNotificationChannel()
+        buildServiceNotification(iconRes, title)
+    }.getOrElse {
+        GlobalState.log("promoteToForeground: notification build failed: ${it.message}")
+        return false
+    }
     val fgType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
         android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
     } else 0

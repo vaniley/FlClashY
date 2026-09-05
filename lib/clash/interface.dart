@@ -219,6 +219,7 @@ abstract class ClashHandlerInterface with ClashInterface {
   FutureOr<String> validateConfig(String data) => invoke<String>(
         method: ActionMethod.validateConfig,
         data: data,
+        defaultValue: 'Core unavailable: configuration could not be validated',
       );
 
   @override
@@ -230,6 +231,7 @@ abstract class ClashHandlerInterface with ClashInterface {
         // which would mask a 2-minute hang as a successful apply. Return a
         // non-empty error string so the caller actually treats it as failed.
         onTimeout: () => 'updateConfig timed out',
+        defaultValue: 'Core unavailable: configuration could not be applied',
       );
 
   @override
@@ -254,6 +256,7 @@ abstract class ClashHandlerInterface with ClashInterface {
       // as a successful setup (and falsely advance lastProfileModified), so the
       // recovery re-apply would silently no-op against a still-broken executor.
       onTimeout: () => 'setupConfig timed out',
+      defaultValue: 'Core unavailable: configuration could not be applied',
     );
   }
 

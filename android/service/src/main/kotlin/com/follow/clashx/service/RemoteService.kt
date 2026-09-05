@@ -262,6 +262,9 @@ class RemoteService : Service() {
         }
 
         override fun setEventListener(event: com.follow.clashx.service.IEventInterface?) {
+            // IllegalStateException is transported by Binder to the caller;
+            // an UnsatisfiedLinkError from JNI would kill the remote process.
+            Core.requireLoaded()
             synchronized(eventLock) {
                 val prev = eventListener.getAndSet(event)
                 // Release the death recipient linked to the previous listener's binder.

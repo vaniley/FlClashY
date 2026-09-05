@@ -33,11 +33,11 @@ class ClashLib extends ClashHandlerInterface with AndroidClashInterface {
   DateTime? _lastCrashTime;
 
   Future<void> _init() async {
+    if (_initInFlight) return;
     _initInFlight = true;
     try {
       await _channel.invokeMethod<String>('init')
           .timeout(const Duration(seconds: 15));
-      _crashCount = 0;
       if (!_initCompleter.isCompleted) _initCompleter.complete(true);
     } catch (e) {
       commonPrint.log('ClashLib init failed: $e');
@@ -157,7 +157,13 @@ class ClashLib extends ClashHandlerInterface with AndroidClashInterface {
   @override
   Future<void> sendMessage(String message) async {
     try {
-      final res = await _channel.invokeMethod<String>('invokeAction', message);
+      if (!await preload()) {
+        _failPendingCompleter(message, 'core service unavailable');
+        return;
+      }
+      final res = await _channel
+          .invokeMethod<String>('invokeAction', message)
+          .timeout(const Duration(seconds: 150));
       if (res == null || res.isEmpty) {
         _failPendingCompleter(message, 'empty response');
         return;

@@ -1,7 +1,7 @@
 name: flclashx
 description: FlClashY multi-platform proxy client based on FlClash and Mihomo.
 publish_to: "none"
-version: 0.4.4+2026090401
+version: 0.4.5+2026090501
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -71,6 +71,7 @@ dependencies:
   webview_flutter: ^4.13.0
 
 dev_dependencies:
+  path_provider_platform_interface: ^2.1.2
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
@@ -141,7 +142,7 @@ msix_config:
   publisher_display_name: vaniley
   publisher: CN=F778E60B-B797-4F7E-AE56-743F6A0F5B32
   identity_name: vaniley.FlClashY
-  msix_version: 0.4.4.0
+  msix_version: 0.4.5.0
   logo_path: assets/images/icon.png
   capabilities: internetClient, privateNetworkClientServer
   languages: en, ru, zh-CN

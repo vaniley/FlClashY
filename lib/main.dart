@@ -35,7 +35,12 @@ Future<void> main(List<String> args) async {
   }
 
   final version = await system.version;
-  await clashCore.preload();
+  // Android binding can take seconds; let Flutter render while it connects.
+  if (Platform.isAndroid) {
+    unawaited(clashCore.preload());
+  } else {
+    await clashCore.preload();
+  }
   await globalState.initApp(version);
   await android?.init();
   await window?.init(version);

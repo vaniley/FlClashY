@@ -104,6 +104,10 @@ data object Core {
     @Volatile
     private var nativeLoaded = false
 
+    fun requireLoaded() {
+        check(nativeLoaded) { "Native core could not be loaded; rebuild the Android core and APK" }
+    }
+
     init {
         try {
             System.loadLibrary("core")

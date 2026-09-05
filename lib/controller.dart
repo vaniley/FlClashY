@@ -142,6 +142,16 @@ class AppController {
   }
 
   Future<void> _updateStatus(bool isStart) async {
+    // A failed cold-start bind must be retryable from the connect button.
+    // Do not start a tunnel against an uninitialized core.
+    if (isStart && Platform.isAndroid) {
+      // A tile tap may arrive while the initial profile is still being applied.
+      await _androidCoreInit;
+      if (!await clashCore.isInit) {
+        clashLib?.reconnectIfNeeded();
+        await _initCore();
+      }
+    }
     await StatusBarManager.updateIcon(isConnected: isStart);
 
     if (isStart) {
@@ -1220,10 +1230,24 @@ class AppController {
     await handleExit();
   }
 
-  Future<void> _initCore() async {
+  Future<void>? _androidCoreInit;
+
+  Future<void> _initCore() {
+    if (!Platform.isAndroid) return _initializeCore();
+    return _androidCoreInit ??= _initializeCore().whenComplete(() {
+      _androidCoreInit = null;
+    });
+  }
+
+  Future<void> _initializeCore() async {
+    if (!await clashCore.preload()) {
+      throw StateError('Unable to connect to the core service');
+    }
     final isInit = await clashCore.isInit;
     if (!isInit) {
-      await clashCore.init();
+      if (!await clashCore.init()) {
+        throw StateError('Core initialization failed');
+      }
       await clashCore.setState(
         globalState.getCoreState(),
       );
@@ -1239,7 +1263,7 @@ class AppController {
     } else {
       clashCore.stopLog();
     }
-    await applyProfile();
+    await applyProfile(silence: Platform.isAndroid);
   }
 
   Future<void> _persistColdStartParams() async {
@@ -1274,10 +1298,11 @@ class AppController {
     clashService?.onCoreCrash = (_) => restartCore();
     try {
       await _initCore();
+      await _initStatus();
     } catch (e) {
-      commonPrint.log("initCore failed (will retry on profile change): $e");
+      commonPrint.log("Core startup failed: $e");
+      globalState.showNotifier("Core startup failed: $e");
     }
-    await _initStatus();
     autoLaunch?.updateStatus(
       _ref.read(appSettingProvider).autoLaunch,
     );
