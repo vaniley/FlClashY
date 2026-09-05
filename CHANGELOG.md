@@ -1,3 +1,7 @@
+## v0.4.6
+
+- Android: restrict JNI compilation to ARMv7, ARM64 and x86_64, matching the packaged Go cores.
+
 ## v0.4.5
 
 - Android: serialize native binding attempts, retain the crash retry budget, and apply the initial profile before the home screen is mounted.

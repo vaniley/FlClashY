@@ -10,6 +10,10 @@ android {
 
     defaultConfig {
         minSdk = 23
+        // Match the Android cores produced by setup.dart.
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
+        }
     }
 
     buildTypes {
